@@ -28,6 +28,55 @@ Meet [Plane](https://plane.so/), an open-source project management tool to track
 
 > Plane is evolving every day. Your suggestions, ideas, and reported bugs help us immensely. Do not hesitate to join in the conversation on [Forum](https://forum.plane.so) or raise a GitHub issue. We read everything and respond to most.
 
+## 🔀 Lightweight role-based workflows
+
+This fork adds an opt-in business workflow layer to Plane while preserving its
+existing project, work-item, state, label, and import data.
+
+- **Business roles separate from access roles**
+  Assign Product, Developer, Tester, or Project Manager responsibilities without
+  changing Plane's Admin, Member, or Guest permissions. Project Managers can
+  move work items to any configured workflow state, subject to completion
+  guards.
+
+- **Permission-aware state transitions**
+  The default main flow progresses from `Backlog` to `Todo`, `In Progress`,
+  `Waiting for Test`, `Testing`, and `Done`, with explicit rejection and
+  cancellation paths. Defects use a shorter test-and-close flow. The state
+  picker only displays the current state and destinations the signed-in member
+  may select.
+
+- **Safe correction of accidental changes**
+  The actor who made the latest accepted state change may reverse that one
+  change, provided no later transition has superseded it.
+
+- **Business-rule enforcement**
+  A main work item cannot be completed while it has an unfinished child marked
+  with the configured blocking label. The configured defect label selects the
+  defect workflow for both main work items and sub-items.
+
+- **Webhook integration**
+  Accepted changes continue to emit Plane's normal `issue` webhook and also emit
+  `issue.workflow_transition`. The workflow event includes semantic and concrete
+  states, workflow track, required role, actor, schema version, and reversal
+  metadata for an external notification bot. Rejected changes emit no transition
+  event.
+
+- **Upgrade-friendly and reversible**
+  Workflow configuration, role assignments, and transition history use additive
+  tables. Bootstrap reuses matching existing states and labels and only creates
+  missing records; it never renames or deletes imported Plane data. Existing
+  projects remain unchanged until the workflow is enabled, and disabling it
+  restores Plane's native unrestricted state editing without deleting the saved
+  configuration.
+
+Configure the extension from a project's workflow settings page. The interface
+includes native English, Simplified Chinese, and Traditional Chinese copy, with
+explicit English fallbacks for Plane's other locales. See the
+[workflow design and integration notes](./docs/lightweight-workflow.md) for the
+complete transition matrix, compatibility contract, webhook behavior, and local
+verification setup.
+
 ## 🚀 Installation
 
 Getting started with Plane is simple. Choose the setup that works best for you:
@@ -42,7 +91,7 @@ Getting started with Plane is simple. Choose the setup that works best for you:
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Docker               | [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://developers.plane.so/self-hosting/methods/docker-compose)         |
 | Kubernetes           | [![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)](https://developers.plane.so/self-hosting/methods/kubernetes) |
-| Managed hosting      | [<img alt="Deploy with Zenith" src="https://cdn.zenith.hosting/buttons/deploy-with-zenith.svg" height="40">](https://zenith.hosting/host/plane) |
+| Managed hosting      | [<img alt="Deploy with Zenith" src="https://cdn.zenith.hosting/buttons/deploy-with-zenith.svg" height="40">](https://zenith.hosting/host/plane)                                         |
 
 `Instance admins` can configure instance settings with [God mode](https://developers.plane.so/self-hosting/govern/instance-admin).
 
