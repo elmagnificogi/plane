@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "react-router dev --port 3000",
     "build": "react-router build",
-    "preview": "react-router build && serve -s build/client -l 3000",
-    "start": "serve -s build/client -l 3000",
+    "preview": "react-router build && serve -s build/client -l 3000 -L -n -c ../../serve.json",
+    "start": "serve -s build/client -l 3000 -L -n -c ../../serve.json",
     "clean": "rm -rf .turbo && rm -rf .next && rm -rf .react-router && rm -rf node_modules && rm -rf dist && rm -rf build",
     "check:lint": "oxlint --max-warnings=11957 .",
     "check:types": "react-router typegen && tsc --noEmit",

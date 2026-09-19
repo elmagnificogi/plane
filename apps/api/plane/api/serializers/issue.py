@@ -5,7 +5,8 @@
 # Django imports
 from django.utils import timezone
 from lxml import html
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from crum import get_current_user
 
 #  Third party imports
 from rest_framework import serializers
@@ -30,6 +31,11 @@ from plane.db.models import (
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
+)
+from plane.utils.workflow import (
+    WorkflowTransitionError,
+    dispatch_workflow_transition,
+    validate_issue_transition,
 )
 
 from .base import BaseSerializer
@@ -124,6 +130,19 @@ class IssueSerializer(BaseSerializer):
             and not State.objects.filter(project_id=self.context.get("project_id"), pk=data.get("state").id).exists()
         ):
             raise serializers.ValidationError("State is not valid please pass a valid state_id")
+
+        if self.instance and data.get("state"):
+            current_user = get_current_user()
+            actor_id = self.context.get("actor_id") or getattr(current_user, "id", None)
+            try:
+                self._workflow_transition_decision = validate_issue_transition(
+                    issue=self.instance,
+                    target_state=data["state"],
+                    actor_id=actor_id,
+                    proposed_label_ids=data.get("labels"),
+                )
+            except WorkflowTransitionError as error:
+                raise serializers.ValidationError({"state_id": error.as_dict()})
 
         # Check parent issue is from workspace as it can be cross workspace
         if (
@@ -285,7 +304,16 @@ class IssueSerializer(BaseSerializer):
 
         # Time updation occues even when other related models are updated
         instance.updated_at = timezone.now()
-        return super().update(instance, validated_data)
+        with transaction.atomic():
+            updated_instance = super().update(instance, validated_data)
+            decision = getattr(self, "_workflow_transition_decision", None)
+            if decision:
+                dispatch_workflow_transition(
+                    decision,
+                    slug=updated_instance.workspace.slug,
+                    origin=self.context.get("origin"),
+                )
+        return updated_instance
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

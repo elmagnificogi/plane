@@ -650,6 +650,8 @@ class IssueDetailAPIEndpoint(BaseAPIView):
                     context={
                         "project_id": project_id,
                         "workspace_id": project.workspace_id,
+                        "actor_id": request.user.id,
+                        "origin": base_host(request=request, is_app=True),
                     },
                     partial=True,
                 )
@@ -781,7 +783,12 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         serializer = IssueSerializer(
             issue,
             data=request.data,
-            context={"project_id": project_id, "workspace_id": project.workspace_id},
+            context={
+                "project_id": project_id,
+                "workspace_id": project.workspace_id,
+                "actor_id": request.user.id,
+                "origin": base_host(request=request, is_app=True),
+            },
             partial=True,
         )
         if serializer.is_valid():

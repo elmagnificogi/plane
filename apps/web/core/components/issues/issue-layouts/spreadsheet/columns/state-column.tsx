@@ -24,6 +24,7 @@ export const SpreadsheetStateColumn = observer(function SpreadsheetStateColumn(p
   return (
     <div className="h-11 border-b-[0.5px] border-subtle">
       <StateDropdown
+        issueId={issue.id}
         projectId={issue.project_id ?? undefined}
         value={issue.state_id}
         onChange={(data) => onChange(issue, { state_id: data }, { changed_property: "state", change_details: data })}

@@ -677,7 +677,16 @@ class IssueViewSet(BaseViewSet):
         current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
 
         requested_data = json.dumps(self.request.data, cls=DjangoJSONEncoder)
-        serializer = IssueCreateSerializer(issue, data=request.data, partial=True, context={"project_id": project_id})
+        serializer = IssueCreateSerializer(
+            issue,
+            data=request.data,
+            partial=True,
+            context={
+                "project_id": project_id,
+                "actor_id": request.user.id,
+                "origin": base_host(request=request, is_app=True),
+            },
+        )
         if serializer.is_valid():
             serializer.save()
             # Check if the update is a migration description update

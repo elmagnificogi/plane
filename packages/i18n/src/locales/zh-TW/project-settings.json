@@ -197,6 +197,64 @@
         "duration": "提前提醒"
       }
     },
+    "lightweight_workflow": {
+      "label": "任務狀態流轉",
+      "page_description": "依照產品、開發、測試和專案經理的職責約束任務狀態，並為通知機器人傳送 Webhook。",
+      "fixed_flow": {
+        "title": "固定狀態流轉",
+        "description": "預設停用；初始化只會新增缺少的狀態、標籤和設定，不會重新命名或刪除現有資料。",
+        "details": "測試可從「測試中」退回；帶有「類型/缺陷」標籤的任務使用缺陷流程，帶有「阻斷」標籤且未完成的子任務會阻止主任務完成。"
+      },
+      "actions": {
+        "initialize_enable": "初始化並啟用",
+        "save_roles": "儲存角色"
+      },
+      "roles": {
+        "title": "業務角色",
+        "description": "獨立於 Plane 的管理員、成員和訪客權限；一位成員可以擁有多個角色。",
+        "product": "產品",
+        "developer": "開發",
+        "tester": "測試",
+        "project_manager": "專案經理"
+      },
+      "states": {
+        "backlog": "待規劃",
+        "todo": "待辦",
+        "in_progress": "進行中",
+        "waiting_for_test": "等待測試",
+        "testing": "測試中",
+        "done_or_delayed_done": "完成 / 延期完成"
+      },
+      "webhook": {
+        "prefix": "每次成功流轉都會繼續傳送標準",
+        "middle": "Webhook，並額外傳送結構化的",
+        "suffix": "事件。通知機器人可在工作區 Webhooks 中訂閱工作事項事件。"
+      },
+      "toasts": {
+        "bootstrap": {
+          "loading": "正在補齊狀態和標籤…",
+          "success_title": "初始化完成",
+          "success_message": "狀態流轉已啟用，現有 Plane 資料未被修改。",
+          "error_title": "初始化失敗",
+          "error_message": "請檢查服務日誌後再試一次。"
+        },
+        "toggle": {
+          "loading": "正在更新…",
+          "success_title": "已更新",
+          "enabled_message": "狀態流轉已啟用。",
+          "disabled_message": "狀態流轉已停用。",
+          "error_title": "更新失敗",
+          "error_message": "請稍後再試一次。"
+        },
+        "roles": {
+          "loading": "正在儲存業務角色…",
+          "success_title": "儲存成功",
+          "success_message": "業務角色已生效。",
+          "error_title": "儲存失敗",
+          "error_message": "請檢查成員是否仍在專案中。"
+        }
+      }
+    },
     "empty_state": {
       "labels": {
         "title": "尚無標籤",

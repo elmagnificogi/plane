@@ -48,6 +48,7 @@ from plane.db.models import (
     IntakeIssue,
     IssueLabel,
     IssueAssignee,
+    State,
 )
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
@@ -471,6 +472,52 @@ def webhook_activity(
             return
         if settings.DEBUG:
             print(e)
+        log_exception(e)
+        return
+
+
+@shared_task
+def workflow_transition_activity(
+    issue_id: str,
+    actor_id: str,
+    slug: str,
+    current_site: str | None,
+    transition: Dict[str, Any],
+) -> None:
+    """Send a structured event for an accepted business-workflow transition."""
+
+    try:
+        issue_data = get_model_data(event="issue", event_id=issue_id)
+        actor_data = get_model_data(event="user", event_id=actor_id)
+        state_ids = [
+            state_id
+            for state_id in (transition.get("from_state_id"), transition.get("to_state_id"))
+            if state_id
+        ]
+        states = {
+            str(state.id): {"id": str(state.id), "name": state.name, "group": state.group}
+            for state in State.objects.filter(id__in=state_ids)
+        }
+        activity = {
+            "field": "state_id",
+            "old_value": states.get(transition.get("from_state_id")),
+            "new_value": states.get(transition.get("to_state_id")),
+            "actor": actor_data,
+            "workflow": transition,
+        }
+        for webhook in Webhook.objects.filter(workspace__slug=slug, is_active=True, issue=True):
+            webhook_send_task.delay(
+                webhook_id=webhook.id,
+                slug=slug,
+                event="issue.workflow_transition",
+                event_data=issue_data,
+                action="update",
+                current_site=current_site,
+                activity=activity,
+            )
+    except Exception as e:
+        if isinstance(e, ObjectDoesNotExist):
+            return
         log_exception(e)
         return
 

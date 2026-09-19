@@ -197,6 +197,64 @@
         "duration": "Wyślij przypomnienie przed"
       }
     },
+    "lightweight_workflow": {
+      "label": "Task state transitions",
+      "page_description": "Constrain task states by product, developer, tester, and project manager responsibilities, and send webhooks to notification bots.",
+      "fixed_flow": {
+        "title": "Fixed state transitions",
+        "description": "Disabled by default. Initialization only adds missing states, labels, and configuration; it never renames or deletes existing data.",
+        "details": "Testers can reject work from Testing. Items labeled Type/Defect use the defect flow, and unfinished child items labeled Blocking prevent the parent from completing."
+      },
+      "actions": {
+        "initialize_enable": "Initialize and enable",
+        "save_roles": "Save roles"
+      },
+      "roles": {
+        "title": "Business roles",
+        "description": "Independent of Plane Admin, Member, and Guest access. A member can have multiple roles.",
+        "product": "Product",
+        "developer": "Developer",
+        "tester": "Tester",
+        "project_manager": "Project manager"
+      },
+      "states": {
+        "backlog": "Backlog",
+        "todo": "Todo",
+        "in_progress": "In Progress",
+        "waiting_for_test": "Waiting for Test",
+        "testing": "Testing",
+        "done_or_delayed_done": "Done / Delayed Done"
+      },
+      "webhook": {
+        "prefix": "Every successful transition continues to send the standard",
+        "middle": "webhook and also sends the structured",
+        "suffix": "event. Notification bots can subscribe to work item events in Workspace Webhooks."
+      },
+      "toasts": {
+        "bootstrap": {
+          "loading": "Adding states and labels...",
+          "success_title": "Initialization complete",
+          "success_message": "State transitions are enabled and existing Plane data was not modified.",
+          "error_title": "Initialization failed",
+          "error_message": "Check the service logs and try again."
+        },
+        "toggle": {
+          "loading": "Updating...",
+          "success_title": "Updated",
+          "enabled_message": "State transitions are enabled.",
+          "disabled_message": "State transitions are disabled.",
+          "error_title": "Update failed",
+          "error_message": "Please try again later."
+        },
+        "roles": {
+          "loading": "Saving business roles...",
+          "success_title": "Saved",
+          "success_message": "Business roles are now active.",
+          "error_title": "Save failed",
+          "error_message": "Check that the member still belongs to the project."
+        }
+      }
+    },
     "empty_state": {
       "labels": {
         "title": "Brak etykiet",

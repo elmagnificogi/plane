@@ -61,6 +61,7 @@ export const RelationIssueProperty = observer(function RelationIssueProperty(pro
     <div className="relative flex items-center gap-2">
       <div className="h-5 flex-shrink-0">
         <StateDropdown
+          issueId={issueId}
           value={issue.state_id}
           projectId={issue.project_id ?? undefined}
           onChange={handleStateChange}

@@ -36,7 +36,8 @@ export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   isInitializing?: boolean;
   onChange: (val: string) => void;
   onClose?: () => void;
-  onDropdownOpen?: () => void;
+  onDropdownOpen?: () => Promise<void> | void;
+  onDropdownPrefetch?: () => void;
   projectId: string | undefined;
   renderByDefault?: boolean;
   showDefaultState?: boolean;
@@ -63,6 +64,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     onChange,
     onClose,
     onDropdownOpen,
+    onDropdownPrefetch,
     placement,
     renderByDefault = true,
     showDefaultState = true,
@@ -74,6 +76,8 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isOpeningRef = useRef(false);
+  const openedAtRef = useRef(0);
   // popper-js refs
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
@@ -98,12 +102,20 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     ],
   });
   // dropdown init
+  const handleDropdownOpen = () => {
+    openedAtRef.current = Date.now();
+    if (!onDropdownOpen) return;
+    isOpeningRef.current = true;
+    return Promise.resolve(onDropdownOpen()).finally(() => {
+      isOpeningRef.current = false;
+    });
+  };
   const { handleClose, handleKeyDown, handleOnClick, searchInputKeyDown } = useDropdown({
     dropdownRef,
     inputRef,
     isOpen,
     onClose,
-    onOpen: onDropdownOpen,
+    onOpen: handleDropdownOpen,
     query,
     setIsOpen,
     setQuery,
@@ -136,6 +148,16 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
     handleClose();
   };
 
+  const handleStateButtonClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    const isRapidSecondClick = openedAtRef.current > 0 && Date.now() - openedAtRef.current < 500;
+    if (isOpeningRef.current || isRapidSecondClick) {
+      event.stopPropagation();
+      event.preventDefault();
+      return;
+    }
+    handleOnClick(event);
+  };
+
   const comboButton = (
     <>
       {button ? (
@@ -143,7 +165,9 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
           ref={setReferenceElement}
           type="button"
           className={cn("clickable block h-full w-full outline-none", buttonContainerClassName)}
-          onClick={handleOnClick}
+          onClick={handleStateButtonClick}
+          onFocus={onDropdownPrefetch}
+          onPointerEnter={onDropdownPrefetch}
           disabled={disabled}
           tabIndex={tabIndex}
         >
@@ -162,7 +186,9 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
             },
             buttonContainerClassName
           )}
-          onClick={handleOnClick}
+          onClick={handleStateButtonClick}
+          onFocus={onDropdownPrefetch}
+          onPointerEnter={onDropdownPrefetch}
           disabled={disabled}
         >
           <DropdownButton
@@ -238,7 +264,11 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
               />
             </div>
             <div className="mt-2 max-h-48 space-y-1 overflow-y-scroll">
-              {filteredOptions ? (
+              {isInitializing ? (
+                <div className="flex items-center justify-center py-2">
+                  <Spinner className="h-3.5 w-3.5" />
+                </div>
+              ) : filteredOptions ? (
                 filteredOptions.length > 0 ? (
                   filteredOptions.map((option) => (
                     <StateOption

@@ -91,6 +91,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
         render={({ field: { value, onChange } }) => (
           <div className="h-7">
             <StateDropdown
+              issueId={isDraft ? undefined : id}
               value={value}
               onChange={(stateId) => {
                 onChange(stateId);

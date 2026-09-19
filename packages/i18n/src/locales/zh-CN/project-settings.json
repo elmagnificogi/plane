@@ -197,6 +197,64 @@
         "duration": "提前提醒"
       }
     },
+    "lightweight_workflow": {
+      "label": "任务状态流转",
+      "page_description": "按照产品、开发、测试和项目经理的职责约束任务状态，并为通知机器人发送 Webhook。",
+      "fixed_flow": {
+        "title": "固定状态流转",
+        "description": "默认关闭；初始化只新增缺少的状态、标签和配置，不会改名或删除现有数据。",
+        "details": "测试可从“测试中”打回；带“类型/缺陷”标签的任务走缺陷流程，带“阻断”标签的未完成子任务会阻止主任务完成。"
+      },
+      "actions": {
+        "initialize_enable": "初始化并启用",
+        "save_roles": "保存角色"
+      },
+      "roles": {
+        "title": "业务角色",
+        "description": "独立于 Plane 的管理员、成员和访客权限；一个成员可以拥有多个角色。",
+        "product": "产品",
+        "developer": "开发",
+        "tester": "测试",
+        "project_manager": "项目经理"
+      },
+      "states": {
+        "backlog": "待规划",
+        "todo": "待办",
+        "in_progress": "进行中",
+        "waiting_for_test": "等待测试",
+        "testing": "测试中",
+        "done_or_delayed_done": "完成 / 延期完成"
+      },
+      "webhook": {
+        "prefix": "每次成功流转都会继续发送标准",
+        "middle": "Webhook，并额外发送结构化的",
+        "suffix": "事件。通知机器人可在工作区 Webhooks 中订阅工作项事件。"
+      },
+      "toasts": {
+        "bootstrap": {
+          "loading": "正在补齐状态和标签…",
+          "success_title": "初始化完成",
+          "success_message": "状态流转已启用，已有 Plane 数据未被修改。",
+          "error_title": "初始化失败",
+          "error_message": "请检查服务日志后重试。"
+        },
+        "toggle": {
+          "loading": "正在更新…",
+          "success_title": "已更新",
+          "enabled_message": "状态流转已启用。",
+          "disabled_message": "状态流转已停用。",
+          "error_title": "更新失败",
+          "error_message": "请稍后重试。"
+        },
+        "roles": {
+          "loading": "正在保存业务角色…",
+          "success_title": "保存成功",
+          "success_message": "业务角色已生效。",
+          "error_title": "保存失败",
+          "error_message": "请检查成员是否仍在项目中。"
+        }
+      }
+    },
     "empty_state": {
       "labels": {
         "title": "尚无标签",
