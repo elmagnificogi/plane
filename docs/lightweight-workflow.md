@@ -89,9 +89,11 @@ workspace bootstrap requests remain responsive on Windows. Serve it through an
 ASGI worker such as Uvicorn rather than Django's development server. Install
 `apps/api/requirements/local.txt` so the in-memory Redis adapter is available.
 It must not be used for a production or multi-process install. The local settings
-trust the development frontend at both
-`127.0.0.1:3000` and `localhost:3000` for credentialed CORS and CSRF-protected
-sign-in.
+trust the development frontend at `127.0.0.1:3000`, `localhost:3000`, and the
+origin configured through `APP_BASE_URL` for credentialed CORS and
+CSRF-protected sign-in. Set `APP_BASE_URL` to the machine's LAN URL and bind the
+ASGI server to a LAN interface when another device needs to access the local
+verification deployment.
 
 ## Deliberate assumption
 
