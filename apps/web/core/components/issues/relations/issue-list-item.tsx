@@ -66,10 +66,14 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
   const { isMobile } = usePlatformOS();
   // derived values
   const issue = getIssueById(relationIssueId);
+  const sourceIssue = getIssueById(issueId);
   const { handleRedirection } = useIssuePeekOverviewRedirection(!!issue?.is_epic);
   const issueOperations = useRelationOperations(issue?.is_epic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES);
   const projectDetail = (issue && issue.project_id && project.getProjectById(issue.project_id)) || undefined;
   const projectId = issue?.project_id;
+  const sourceProjectId = sourceIssue?.project_id;
+  const isCrossProject = Boolean(sourceProjectId && projectId && sourceProjectId !== projectId);
+  const projectIdentifier = projectDetail?.identifier ?? issue?.project_identifier;
 
   if (!issue || !projectId) return <></>;
 
@@ -77,19 +81,19 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
     workspaceSlug: workspaceSlug.toString(),
     projectId: issue?.project_id,
     issueId: issue?.id,
-    projectIdentifier: projectDetail?.identifier,
+    projectIdentifier,
     sequenceId: issue?.sequence_id,
     isEpic: issue?.is_epic,
   });
 
   // handlers
-  const handleIssuePeekOverview = (issue: TIssue) => {
-    if (issue.is_epic) {
+  const handleIssuePeekOverview = (targetIssue: TIssue) => {
+    if (targetIssue.is_epic) {
       // open epics in new tab
       window.open(workItemLink, "_blank");
       return;
     }
-    handleRedirection(workspaceSlug, issue, isMobile);
+    handleRedirection(workspaceSlug, targetIssue, isMobile);
   };
 
   const handleEditIssue = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
@@ -116,7 +120,8 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
   const handleRemoveRelation = (e: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     e.preventDefault();
     e.stopPropagation();
-    removeRelation(workspaceSlug, projectId, issueId, relationKey, relationIssueId);
+    if (!sourceProjectId) return;
+    removeRelation(workspaceSlug, sourceProjectId, issueId, relationKey, relationIssueId);
   };
 
   return (
@@ -132,11 +137,11 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
             <span className="size-5 flex-shrink-0" />
             <div className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
               <div className="flex-shrink-0">
-                {projectDetail && (
+                {projectIdentifier && (
                   <IssueIdentifier
-                    projectId={projectDetail.id}
+                    projectId={projectId}
                     issueTypeId={issue.type_id}
-                    projectIdentifier={projectDetail.identifier}
+                    projectIdentifier={projectIdentifier}
                     issueSequenceId={issue.sequence_id}
                     size="xs"
                     variant="secondary"
@@ -150,22 +155,37 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
             </div>
             <div
               className="flex-shrink-0 text-13"
+              role="presentation"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
               }}
+              onKeyDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
             >
-              <RelationIssueProperty
-                workspaceSlug={workspaceSlug}
-                issueId={relationIssueId}
-                disabled={disabled}
-                issueOperations={issueOperations}
-                issueServiceType={issueServiceType}
-              />
+              {isCrossProject ? (
+                <span className="inline-flex items-center gap-1.5 rounded border border-subtle px-2 py-0.5 text-11 text-secondary">
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ backgroundColor: issue.state_color ?? "var(--color-text-tertiary)" }}
+                  />
+                  {issue.state_name ?? "—"}
+                </span>
+              ) : (
+                <RelationIssueProperty
+                  workspaceSlug={workspaceSlug}
+                  issueId={relationIssueId}
+                  disabled={disabled}
+                  issueOperations={issueOperations}
+                  issueServiceType={issueServiceType}
+                />
+              )}
             </div>
             <div className="flex-shrink-0 pl-2 text-13">
               <CustomMenu placement="bottom-end" ellipsis>
-                {!disabled && (
+                {!disabled && !isCrossProject && (
                   <CustomMenu.MenuItem onClick={handleEditIssue}>
                     <div className="flex items-center gap-2">
                       <EditIcon className="h-3.5 w-3.5" strokeWidth={2} />
@@ -190,7 +210,7 @@ export const RelationIssueListItem = observer(function RelationIssueListItem(pro
                   </CustomMenu.MenuItem>
                 )}
 
-                {!disabled && (
+                {!disabled && !isCrossProject && (
                   <CustomMenu.MenuItem onClick={handleDeleteIssue}>
                     <div className="flex items-center gap-2">
                       <TrashIcon className="h-3.5 w-3.5" strokeWidth={2} />

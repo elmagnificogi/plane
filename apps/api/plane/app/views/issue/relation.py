@@ -150,6 +150,12 @@ class IssueRelationViewSet(BaseViewSet):
                     ),
                     Value([], output_field=ArrayField(UUIDField())),
                 ),
+                project_identifier=F("project__identifier"),
+                project_name=F("project__name"),
+                state_name=F("state__name"),
+                state_color=F("state__color"),
+                state_group=F("state__group"),
+                work_item_updated_at=F("updated_at"),
             )
         ).distinct()
 
@@ -169,6 +175,12 @@ class IssueRelationViewSet(BaseViewSet):
             "created_by",
             "updated_by",
             "relation_type",
+            "project_identifier",
+            "project_name",
+            "state_name",
+            "state_color",
+            "state_group",
+            "work_item_updated_at",
         ]
 
         response_data = {
@@ -214,17 +226,24 @@ class IssueRelationViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        issues = request.data.get("issues", [])
-        project = Project.objects.get(pk=project_id)
+        requested_issue_ids = {str(value) for value in request.data.get("issues", [])}
+        project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        if not Issue.issue_objects.filter(pk=issue_id, project_id=project_id, workspace__slug=slug).exists():
+            return Response({"message": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Scope to workspace to prevent cross-tenant IDOR
         # Relations can cross projects so only workspace scope is enforced
         issues = list(
             Issue.issue_objects.filter(
                 workspace__slug=slug,
-                pk__in=issues,
+                pk__in=requested_issue_ids,
             ).values_list("id", flat=True)
         )
+        if {str(value) for value in issues} != requested_issue_ids:
+            return Response(
+                {"issues": "Work items can only be related within the same workspace."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         issue_relation = IssueRelation.objects.bulk_create(
             [

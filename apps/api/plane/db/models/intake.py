@@ -15,6 +15,7 @@ class Intake(ProjectBaseModel):
     is_default = models.BooleanField(default=False)
     view_props = models.JSONField(default=dict)
     logo_props = models.JSONField(default=dict)
+    template_config = models.JSONField(default=dict)
 
     def __str__(self):
         """Return name of the intake"""

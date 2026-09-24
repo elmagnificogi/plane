@@ -419,6 +419,14 @@
         "toggle_description": "允许项目成员在应用中创建接收请求。",
         "toggle_tooltip_on": "请项目管理员代为开启。",
         "toggle_tooltip_off": "请项目管理员代为关闭。",
+        "templates": {
+          "title": "Intake 内容模板",
+          "description": "设置可复用的 Markdown 需求内容结构。成员创建收集工作项时可以选择模板，但只有项目管理员能在这里维护模板。",
+          "manage": "管理模板",
+          "save_success": "Intake 模板保存成功。",
+          "save_error": "Intake 模板保存失败，请重试。",
+          "starter_markdown": "## 需求背景\n\n请说明需求产生的原因和业务背景。\n\n## 当前痛点\n\n请说明当前问题、受影响的用户和造成的影响。\n\n## 期望效果\n\n请说明期望结果和验收标准。\n\n## 优先级\n\n请说明紧急程度和优先级依据。\n\n## 期望时间\n\n请填写期望完成时间或时间范围。\n\n## 预计发布版本 / 时间\n\n请填写目标版本和预计发布时间。\n\n## 补充说明\n\n请补充相关链接、截图、依赖或其他信息。"
+        },
         "notify_assignee": {
           "title": "通知负责人",
           "description": "对于新的接收请求，默认负责人将通过通知收到提醒"

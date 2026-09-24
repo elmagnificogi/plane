@@ -12,6 +12,11 @@ import { EInboxIssueSource } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
+export type TInboxIssueUpdatePayload = Omit<Partial<TInboxIssue>, "issue"> & {
+  target_project_id?: string;
+  issue?: Partial<TIssue>;
+};
+
 export class InboxIssueService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -52,7 +57,7 @@ export class InboxIssueService extends APIService {
     workspaceSlug: string,
     projectId: string,
     inboxIssueId: string,
-    data: Partial<TInboxIssue>
+    data: TInboxIssueUpdatePayload
   ): Promise<TInboxIssue> {
     return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/inbox-issues/${inboxIssueId}/`, data)
       .then((response) => response?.data)

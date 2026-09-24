@@ -7,7 +7,7 @@
 import { cloneDeep, set } from "lodash-es";
 import { action, makeObservable, observable, runInAction } from "mobx";
 // plane imports
-import { setLanguage } from "@plane/i18n";
+import { FALLBACK_LANGUAGE, setLanguage } from "@plane/i18n";
 import type { TLanguage } from "@plane/i18n";
 // types
 import type { IUserTheme, TUserProfile } from "@plane/types";
@@ -64,7 +64,7 @@ export class ProfileStore implements IUserProfileStore {
     has_marketing_email_consent: false,
     created_at: "",
     updated_at: "",
-    language: "",
+    language: FALLBACK_LANGUAGE,
     start_of_the_week: EStartOfTheWeek.SUNDAY,
   };
 

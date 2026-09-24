@@ -2523,18 +2523,26 @@ class IssueRelationListCreateAPIEndpoint(BaseAPIView):
         relation_type = serializer.validated_data["relation_type"]
         issues = serializer.validated_data["issues"]
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
+        if not Issue.issue_objects.filter(pk=issue_id, project_id=project_id, workspace__slug=slug).exists():
+            return Response({"detail": "Work item not found."}, status=status.HTTP_404_NOT_FOUND)
 
         actual_relation = get_actual_relation(relation_type)
         is_reverse = relation_type in ["blocking", "start_after", "finish_after"]
 
         # Scope to workspace to prevent cross-tenant IDOR
         # Relations can cross projects so only workspace scope is enforced
+        requested_issue_ids = {str(value) for value in issues}
         issues = list(
             Issue.issue_objects.filter(
                 workspace__slug=slug,
-                pk__in=issues,
+                pk__in=requested_issue_ids,
             ).values_list("id", flat=True)
         )
+        if {str(value) for value in issues} != requested_issue_ids:
+            return Response(
+                {"issues": "Work items can only be related within the same workspace."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         IssueRelation.objects.bulk_create(
             [

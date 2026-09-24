@@ -101,6 +101,12 @@ export type TIssue = TBaseIssue & {
   // sourceIssueId is used to store the original issue id when creating a copy of an issue. Used in cloning property values. It is not a part of the API response.
   sourceIssueId?: string;
   state__group?: TStateGroups | null;
+  project_identifier?: string;
+  project_name?: string;
+  state_name?: string;
+  state_color?: string;
+  state_group?: TStateGroups | null;
+  work_item_updated_at?: string;
 };
 
 export type TIssueMap = {

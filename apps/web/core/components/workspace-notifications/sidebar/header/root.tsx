@@ -4,13 +4,17 @@
  * See the LICENSE file for details.
  */
 
+import { ArrowLeft } from "lucide-react";
 import { observer } from "mobx-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
+import { IconButton } from "@plane/propel/icon-button";
 import { InboxIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
+// hooks
+import { useAppRouter } from "@/hooks/use-app-router";
 // local imports
 import { NotificationSidebarHeaderOptions } from "./options";
 
@@ -22,12 +26,20 @@ export const NotificationSidebarHeader = observer(function NotificationSidebarHe
   props: TNotificationSidebarHeader
 ) {
   const { workspaceSlug } = props;
+  const router = useAppRouter();
   const { t } = useTranslation();
 
   if (!workspaceSlug) return <></>;
   return (
     <Header className="my-auto bg-surface-1">
       <Header.LeftItem>
+        <IconButton
+          variant="ghost"
+          size="base"
+          icon={ArrowLeft}
+          aria-label={t("common.back")}
+          onClick={() => router.push(`/${workspaceSlug}/`)}
+        />
         <Breadcrumbs>
           <Breadcrumbs.Item
             component={

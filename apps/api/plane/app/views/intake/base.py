@@ -7,6 +7,7 @@ import json
 
 # Django import
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Q, Count, OuterRef, Func, F, Prefetch, Subquery
 from django.core.serializers.json import DjangoJSONEncoder
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -52,6 +53,8 @@ from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.global_paginator import paginate
 from plane.utils.host import base_host
 from plane.db.models.intake import SourceType
+from plane.utils.intake import IntakeProjectMoveError, move_intake_issue_to_project
+from plane.utils.uuid import is_valid_uuid
 
 
 class IntakeViewSet(BaseViewSet):
@@ -70,10 +73,25 @@ class IntakeViewSet(BaseViewSet):
             .select_related("workspace", "project")
         )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
         intake = self.get_queryset().first()
         return Response(IntakeSerializer(intake).data, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN])
+    def partial_update(self, request, slug, project_id, pk):
+        intake = self.get_queryset().filter(pk=pk).first()
+        if intake is None:
+            return Response({"error": "Intake not found"}, status=status.HTTP_404_NOT_FOUND)
+        if set(request.data.keys()) - {"template_config"}:
+            return Response(
+                {"error": "Only template_config can be updated from this endpoint."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = IntakeSerializer(intake, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def perform_create(self, serializer):
@@ -331,6 +349,145 @@ class IntakeIssueViewSet(BaseViewSet):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    def _accept_intake_issue(self, request, slug, project_id, intake_issue, is_workspace_admin):
+        """Accept an intake item, optionally moving its work item to another project."""
+
+        target_project_id = request.data.get("target_project_id", project_id)
+        if not is_valid_uuid(str(target_project_id)):
+            return Response({"error": "Invalid target project"}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_project = Project.objects.filter(pk=target_project_id, workspace__slug=slug).first()
+        if target_project is None:
+            return Response({"error": "Target project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        target_member = ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project=target_project,
+            member=request.user,
+            role__in=[ROLE.ADMIN.value, ROLE.MEMBER.value],
+            is_active=True,
+        ).exists()
+        target_project_member = ProjectMember.objects.filter(
+            workspace__slug=slug,
+            project=target_project,
+            member=request.user,
+            is_active=True,
+        ).exists()
+        if not target_member and not (is_workspace_admin and target_project_member):
+            return Response(
+                {"error": "You do not have permission to create work items in the target project"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        issue_data = dict(request.data.get("issue") or {})
+        # These are handled by the web client after the base work item is
+        # accepted; they are not fields on IssueCreateSerializer.
+        for virtual_field in ("cycle_id", "module_ids", "project_id", "id"):
+            issue_data.pop(virtual_field, None)
+
+        with transaction.atomic():
+            locked_intake_issue = IntakeIssue.objects.select_for_update().get(pk=intake_issue.id)
+            issue = Issue.objects.select_for_update().get(pk=locked_intake_issue.issue_id)
+            issue_current_instance = json.dumps(IssueDetailSerializer(issue).data, cls=DjangoJSONEncoder)
+            intake_current_instance = json.dumps(
+                IntakeIssueSerializer(locked_intake_issue).data,
+                cls=DjangoJSONEncoder,
+            )
+
+            try:
+                issue = move_intake_issue_to_project(issue, target_project)
+            except IntakeProjectMoveError as error:
+                return Response({"error": str(error)}, status=status.HTTP_400_BAD_REQUEST)
+            # Serializing the pre-move intake row caches its related Issue.
+            # Drop that cache so the acceptance serializer cannot save the
+            # stale source-project instance back over the completed move.
+            locked_intake_issue._state.fields_cache.pop("issue", None)
+
+            if issue_data:
+                issue_serializer = IssueCreateSerializer(
+                    issue,
+                    data=issue_data,
+                    partial=True,
+                    context={
+                        "project_id": target_project.id,
+                        "allow_triage_state": True,
+                        "actor_id": request.user.id,
+                        "origin": base_host(request=request, is_app=True),
+                    },
+                )
+                issue_serializer.is_valid(raise_exception=True)
+                issue_serializer.save()
+
+            intake_serializer = IntakeIssueSerializer(
+                locked_intake_issue,
+                data={"status": 1},
+                partial=True,
+            )
+            intake_serializer.is_valid(raise_exception=True)
+            intake_serializer.save()
+
+        if issue_data:
+            issue_activity.delay(
+                type="issue.activity.updated",
+                requested_data=json.dumps(issue_data, cls=DjangoJSONEncoder),
+                actor_id=str(request.user.id),
+                issue_id=str(issue.id),
+                project_id=str(target_project.id),
+                current_instance=issue_current_instance,
+                epoch=int(timezone.now().timestamp()),
+                notification=True,
+                origin=base_host(request=request, is_app=True),
+                intake=str(intake_issue.id),
+            )
+            issue_description_version_task.delay(
+                updated_issue=issue_current_instance,
+                issue_id=str(issue.id),
+                user_id=request.user.id,
+            )
+
+        issue_activity.delay(
+            type="intake.activity.created",
+            requested_data=json.dumps(
+                {"status": 1, "target_project_id": str(target_project.id)},
+                cls=DjangoJSONEncoder,
+            ),
+            actor_id=str(request.user.id),
+            issue_id=str(issue.id),
+            project_id=str(target_project.id),
+            current_instance=intake_current_instance,
+            epoch=int(timezone.now().timestamp()),
+            notification=False,
+            origin=base_host(request=request, is_app=True),
+            intake=str(intake_issue.id),
+        )
+
+        accepted_intake_issue = (
+            IntakeIssue.objects.select_related("issue")
+            .prefetch_related("issue__labels", "issue__assignees")
+            .annotate(
+                label_ids=Coalesce(
+                    ArrayAgg(
+                        "issue__labels__id",
+                        distinct=True,
+                        filter=Q(~Q(issue__labels__id__isnull=True) & Q(issue__label_issue__deleted_at__isnull=True)),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
+                assignee_ids=Coalesce(
+                    ArrayAgg(
+                        "issue__assignees__id",
+                        distinct=True,
+                        filter=Q(
+                            ~Q(issue__assignees__id__isnull=True) & Q(issue__issue_assignee__deleted_at__isnull=True)
+                        ),
+                    ),
+                    Value([], output_field=ArrayField(UUIDField())),
+                ),
+            )
+            .get(pk=intake_issue.id)
+        )
+        return Response(IntakeIssueDetailSerializer(accepted_intake_issue).data, status=status.HTTP_200_OK)
+
     @allow_permission(allowed_roles=[ROLE.ADMIN], creator=True, model=Issue)
     def partial_update(self, request, slug, project_id, pk):
         skip_activity = request.data.pop("skip_activity", False)
@@ -372,6 +529,21 @@ class IntakeIssueViewSet(BaseViewSet):
                 {"error": "You cannot edit intake issues"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if request.data.get("target_project_id") and str(request.data.get("status")) != "1":
+            return Response(
+                {"error": "A target project can only be selected while accepting an intake work item"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if str(request.data.get("status")) == "1":
+            is_source_project_admin = project_member and project_member.role == ROLE.ADMIN.value
+            if not is_source_project_admin and not is_workspace_admin:
+                return Response(
+                    {"error": "Only project admins can accept intake work items"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return self._accept_intake_issue(request, slug, project_id, intake_issue, is_workspace_admin)
 
         # Get issue data
         issue_data = request.data.pop("issue", False)

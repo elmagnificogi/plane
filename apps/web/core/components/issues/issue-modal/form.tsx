@@ -67,6 +67,7 @@ export interface IssueFormProps {
   handleDuplicateIssueModal: (isOpen: boolean) => void;
   handleDraftAndClose?: () => void;
   isProjectSelectionDisabled?: boolean;
+  allowProjectSelectionOnUpdate?: boolean;
   showActionButtons?: boolean;
   dataResetProperties?: any[];
 }
@@ -91,6 +92,7 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
       loading: `${data?.id ? t("updating") : t("saving")}`,
     },
     isProjectSelectionDisabled = false,
+    allowProjectSelectionOnUpdate = false,
     showActionButtons = true,
     dataResetProperties = [],
   } = props;
@@ -365,7 +367,11 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                 <div className="flex items-center gap-x-1">
                   <IssueProjectSelect
                     control={control}
-                    disabled={!!data?.id || !!data?.sourceIssueId || isProjectSelectionDisabled}
+                    disabled={
+                      (!!data?.id && !allowProjectSelectionOnUpdate) ||
+                      !!data?.sourceIssueId ||
+                      isProjectSelectionDisabled
+                    }
                     handleFormChange={handleFormChange}
                   />
                 </div>

@@ -435,6 +435,12 @@ class IssueRelationSerializer(BaseSerializer):
     relation_type = serializers.CharField(read_only=True)
     state_id = serializers.UUIDField(source="related_issue.state.id", read_only=True)
     priority = serializers.CharField(source="related_issue.priority", read_only=True)
+    project_identifier = serializers.CharField(source="related_issue.project.identifier", read_only=True)
+    project_name = serializers.CharField(source="related_issue.project.name", read_only=True)
+    state_name = serializers.CharField(source="related_issue.state.name", read_only=True)
+    state_color = serializers.CharField(source="related_issue.state.color", read_only=True)
+    state_group = serializers.CharField(source="related_issue.state.group", read_only=True)
+    work_item_updated_at = serializers.DateTimeField(source="related_issue.updated_at", read_only=True)
     assignee_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=User.objects.all()),
         write_only=True,
@@ -451,6 +457,12 @@ class IssueRelationSerializer(BaseSerializer):
             "name",
             "state_id",
             "priority",
+            "project_identifier",
+            "project_name",
+            "state_name",
+            "state_color",
+            "state_group",
+            "work_item_updated_at",
             "assignee_ids",
             "created_by",
             "created_at",
@@ -475,6 +487,12 @@ class RelatedIssueSerializer(BaseSerializer):
     relation_type = serializers.CharField(read_only=True)
     state_id = serializers.UUIDField(source="issue.state.id", read_only=True)
     priority = serializers.CharField(source="issue.priority", read_only=True)
+    project_identifier = serializers.CharField(source="issue.project.identifier", read_only=True)
+    project_name = serializers.CharField(source="issue.project.name", read_only=True)
+    state_name = serializers.CharField(source="issue.state.name", read_only=True)
+    state_color = serializers.CharField(source="issue.state.color", read_only=True)
+    state_group = serializers.CharField(source="issue.state.group", read_only=True)
+    work_item_updated_at = serializers.DateTimeField(source="issue.updated_at", read_only=True)
     assignee_ids = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=User.objects.all()),
         write_only=True,
@@ -491,6 +509,12 @@ class RelatedIssueSerializer(BaseSerializer):
             "name",
             "state_id",
             "priority",
+            "project_identifier",
+            "project_name",
+            "state_name",
+            "state_color",
+            "state_group",
+            "work_item_updated_at",
             "assignee_ids",
             "created_by",
             "created_at",

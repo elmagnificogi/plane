@@ -7,11 +7,13 @@
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import useSWR from "swr";
 import { RefreshCcw } from "lucide-react";
 // ui
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import type { TIntake, TIntakeTemplateConfig } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -23,6 +25,14 @@ import { useUserPermissions } from "@/hooks/store/user";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { IntakeIcon } from "@plane/propel/icons";
+import { IntakeService } from "@/services/inbox";
+
+const intakeService = new IntakeService();
+
+const normalizeTemplateConfig = (intake?: TIntake): TIntakeTemplateConfig => ({
+  templates: intake?.template_config?.templates ?? [],
+  default_template_id: intake?.template_config?.default_template_id ?? null,
+});
 
 export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
   // states
@@ -36,11 +46,21 @@ export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
   const { currentProjectDetails, loader: currentProjectDetailsLoader } = useProject();
   const { loader } = useProjectInbox();
 
+  const workspaceSlugValue = workspaceSlug?.toString();
+  const projectIdValue = projectId?.toString();
+  const { data: intake, isLoading: isIntakeLoading } = useSWR<TIntake>(
+    workspaceSlugValue && projectIdValue && currentProjectDetails?.inbox_view
+      ? `intake-${workspaceSlugValue}-${projectIdValue}`
+      : null,
+    () => intakeService.retrieve(workspaceSlugValue!, projectIdValue!)
+  );
+
   // derived value
   const isAuthorized = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     EUserPermissionsLevel.PROJECT
   );
+  const templateConfig = normalizeTemplateConfig(intake);
 
   return (
     <Header>
@@ -77,8 +97,9 @@ export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
               projectId={projectId.toString()}
               modalState={createIssueModal}
               handleModalClose={() => setCreateIssueModal(false)}
+              templateConfig={templateConfig}
             />
-            <Button variant="primary" size="lg" onClick={() => setCreateIssueModal(true)}>
+            <Button variant="primary" size="lg" disabled={isIntakeLoading} onClick={() => setCreateIssueModal(true)}>
               {t("add_work_item")}
             </Button>
           </div>

@@ -419,6 +419,14 @@
         "toggle_description": "Proje üyelerinin uygulama içinde alım talepleri oluşturmasına izin verin.",
         "toggle_tooltip_on": "Proje Yöneticinizden bunu açmasını isteyin.",
         "toggle_tooltip_off": "Proje Yöneticinizden bunu kapatmasını isteyin.",
+        "templates": {
+          "title": "Intake content templates",
+          "description": "Define reusable Markdown outlines for intake descriptions. Members can select a template while creating a request, but only project admins can manage them here.",
+          "manage": "Manage templates",
+          "save_success": "Intake templates saved successfully.",
+          "save_error": "Intake templates could not be saved. Please try again.",
+          "starter_markdown": "## Requirement background\\n\\nDescribe why this request exists and its business context.\\n\\n## Current pain points\\n\\nDescribe the current problems, affected users, and impact.\\n\\n## Expected outcome\\n\\nDescribe the desired result and acceptance criteria.\\n\\n## Priority\\n\\nDescribe the urgency and priority rationale.\\n\\n## Expected time\\n\\nProvide the expected completion date or time window.\\n\\n## Planned release version / date\\n\\nProvide the target version and planned release date.\\n\\n## Additional notes\\n\\nAdd links, screenshots, dependencies, or other context."
+        },
         "notify_assignee": {
           "title": "Atanan kişileri bildir",
           "description": "Yeni bir alım talebi için varsayılan atanan kişiler bildirimler aracılığıyla uyarılacaktır"

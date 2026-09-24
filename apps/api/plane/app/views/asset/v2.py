@@ -7,13 +7,17 @@ import uuid
 
 # Django imports
 from django.conf import settings
-from django.http import HttpResponseRedirect
+from django.core import signing
+from django.core.files.storage import default_storage
+from django.http import HttpResponse, HttpResponseRedirect
 from django.utils import timezone
+from django.utils.http import content_disposition_header
 from django.db import IntegrityError
 from django.db.models import Q
 
 # Third party imports
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 
@@ -26,6 +30,119 @@ from plane.utils.cache import invalidate_cache_directly
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
+
+
+LOCAL_ASSET_UPLOAD_SALT = "plane-local-asset-upload"
+
+
+def _use_local_file_storage():
+    return getattr(settings, "USE_LOCAL_FILE_STORAGE", False)
+
+
+def _asset_upload_data(request, asset, file_type, file_size):
+    """Return an S3 presigned form or a signed local-upload form."""
+    if _use_local_file_storage():
+        token = signing.dumps(
+            {
+                "asset_id": str(asset.id),
+                "asset_key": asset.asset.name,
+            },
+            salt=LOCAL_ASSET_UPLOAD_SALT,
+        )
+        return {
+            "url": request.build_absolute_uri("/api/assets/v2/local-upload/"),
+            "fields": {
+                "asset_id": str(asset.id),
+                "token": token,
+            },
+        }
+
+    storage = S3Storage(request=request)
+    return storage.generate_presigned_post(
+        object_name=asset.asset.name,
+        file_type=file_type,
+        file_size=file_size,
+    )
+
+
+def _local_asset_response(asset, disposition="inline", filename=None):
+    if not default_storage.exists(asset.asset.name):
+        return Response(
+            {"error": "The requested asset could not be found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    content_type = (asset.attributes.get("type") or "application/octet-stream").split(";")[0].strip()
+    with default_storage.open(asset.asset.name, "rb") as asset_file:
+        response = HttpResponse(asset_file.read(), content_type=content_type)
+    response["Content-Disposition"] = content_disposition_header(
+        disposition == "attachment",
+        filename or asset.attributes.get("name"),
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+class LocalFileAssetUploadEndpoint(BaseAPIView):
+    """Receive a short-lived signed upload when local file storage is enabled."""
+
+    permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [AssetRateThrottle]
+
+    def post(self, request):
+        if not _use_local_file_storage():
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        token = request.data.get("token")
+        asset_id = request.data.get("asset_id")
+        uploaded_file = request.FILES.get("file")
+        if not token or not asset_id or uploaded_file is None:
+            return Response(
+                {"error": "A signed asset ID and file are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            signed_data = signing.loads(
+                token,
+                salt=LOCAL_ASSET_UPLOAD_SALT,
+                max_age=getattr(settings, "SIGNED_URL_EXPIRATION", 3600),
+            )
+        except signing.SignatureExpired:
+            return Response({"error": "Upload authorization has expired."}, status=status.HTTP_403_FORBIDDEN)
+        except signing.BadSignature:
+            return Response({"error": "Invalid upload authorization."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            asset = FileAsset.objects.get(id=asset_id, is_uploaded=False)
+        except FileAsset.DoesNotExist:
+            return Response(
+                {"error": "The requested asset could not be found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if signed_data.get("asset_id") != str(asset.id) or signed_data.get("asset_key") != asset.asset.name:
+            return Response({"error": "Invalid upload authorization."}, status=status.HTTP_403_FORBIDDEN)
+
+        if uploaded_file.size < 1 or uploaded_file.size > settings.FILE_SIZE_LIMIT:
+            return Response(
+                {"error": "File size is outside the allowed range."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        asset_key = asset.asset.name
+        if default_storage.exists(asset_key):
+            default_storage.delete(asset_key)
+        saved_name = default_storage.save(asset_key, uploaded_file)
+        asset.asset.name = saved_name
+        asset.size = uploaded_file.size
+        asset.storage_metadata = {
+            "ContentType": asset.attributes.get("type") or uploaded_file.content_type,
+            "ContentLength": uploaded_file.size,
+        }
+        asset.save(update_fields=["asset", "size", "storage_metadata"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserAssetsV2Endpoint(BaseAPIView):
@@ -155,14 +272,11 @@ class UserAssetsV2Endpoint(BaseAPIView):
             entity_type=entity_type,
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        upload_data = _asset_upload_data(request, asset, type, size_limit)
         # Return the presigned URL
         return Response(
             {
-                "upload_data": presigned_url,
+                "upload_data": upload_data,
                 "asset_id": str(asset.id),
                 "asset_url": asset.asset_url,
             },
@@ -400,14 +514,11 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
             **self.get_entity_id_field(entity_type=entity_type, entity_id=entity_identifier),
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        upload_data = _asset_upload_data(request, asset, type, size_limit)
         # Return the presigned URL
         return Response(
             {
-                "upload_data": presigned_url,
+                "upload_data": upload_data,
                 "asset_id": str(asset.id),
                 "asset_url": asset.asset_url,
             },
@@ -519,12 +630,15 @@ class StaticFileAssetEndpoint(BaseAPIView):
         # Get the presigned URL.
         # Force attachment disposition for script-capable MIME types to prevent
         # same-origin XSS when assets are served on the application's origin.
-        storage = S3Storage(request=request)
         asset_mime_type = (asset.attributes.get("type") or "").split(";")[0].strip().lower()
         disposition = (
             "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
         )
+        if _use_local_file_storage():
+            return _local_asset_response(asset, disposition=disposition)
+
         # Generate a presigned URL to share an S3 object
+        storage = S3Storage(request=request)
         signed_url = storage.generate_presigned_url(
             object_name=asset.asset.name,
             disposition=disposition,
@@ -630,14 +744,11 @@ class ProjectAssetEndpoint(BaseAPIView):
             **self.get_entity_id_field(entity_type, entity_identifier),
         )
 
-        # Get the presigned URL
-        storage = S3Storage(request=request)
-        # Generate a presigned URL to share an S3 object
-        presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        upload_data = _asset_upload_data(request, asset, type, size_limit)
         # Return the presigned URL
         return Response(
             {
-                "upload_data": presigned_url,
+                "upload_data": upload_data,
                 "asset_id": str(asset.id),
                 "asset_url": asset.asset_url,
             },

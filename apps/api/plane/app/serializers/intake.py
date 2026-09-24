@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+# Python imports
+from uuid import UUID
+
 # Third party frameworks
 from rest_framework import serializers
 
@@ -22,6 +25,64 @@ class IntakeSerializer(BaseSerializer):
         model = Intake
         fields = "__all__"
         read_only_fields = ["project", "workspace"]
+
+    def validate_template_config(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Template configuration must be an object.")
+
+        templates = value.get("templates", [])
+        default_template_id = value.get("default_template_id")
+        if not isinstance(templates, list):
+            raise serializers.ValidationError("Templates must be a list.")
+        if len(templates) > 20:
+            raise serializers.ValidationError("An intake can contain at most 20 templates.")
+
+        normalized_templates = []
+        template_ids = set()
+        template_names = set()
+
+        for raw_template in templates:
+            if not isinstance(raw_template, dict):
+                raise serializers.ValidationError("Each template must be an object.")
+
+            try:
+                template_id = str(UUID(str(raw_template.get("id"))))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise serializers.ValidationError("Each template must have a valid ID.") from exc
+            if template_id in template_ids:
+                raise serializers.ValidationError("Template IDs must be unique.")
+            template_ids.add(template_id)
+
+            name = raw_template.get("name", "")
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 100:
+                raise serializers.ValidationError("Template names must contain 1 to 100 characters.")
+            name = name.strip()
+            normalized_name = name.casefold()
+            if normalized_name in template_names:
+                raise serializers.ValidationError("Template names must be unique.")
+            template_names.add(normalized_name)
+
+            description = raw_template.get("description", "")
+            if not isinstance(description, str) or len(description) > 20000:
+                raise serializers.ValidationError("Template descriptions must be text up to 20,000 characters.")
+
+            normalized_templates.append(
+                {
+                    "id": template_id,
+                    "name": name,
+                    "description": description,
+                }
+            )
+
+        if default_template_id is not None:
+            try:
+                default_template_id = str(UUID(str(default_template_id)))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise serializers.ValidationError("Default template ID is invalid.") from exc
+            if default_template_id not in template_ids:
+                raise serializers.ValidationError("Default template must refer to an existing template.")
+
+        return {"templates": normalized_templates, "default_template_id": default_template_id}
 
 
 class IntakeIssueSerializer(BaseSerializer):

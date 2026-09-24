@@ -32,6 +32,7 @@ export interface IInboxIssueStore {
   created_by: string | undefined;
   duplicate_issue_detail: TInboxDuplicateIssueDetails | undefined;
   // actions
+  acceptInboxIssue: (targetProjectId: string, issue: Partial<TIssue>) => Promise<TInboxIssue | undefined>;
   updateInboxIssueStatus: (status: TInboxIssueStatus) => Promise<void>; // accept, decline
   updateInboxIssueDuplicateTo: (issueId: string) => Promise<void>; // connecting the inbox issue to the project existing issue
   updateInboxIssueSnoozeTill: (date: Date | undefined) => Promise<void>; // snooze the issue
@@ -87,6 +88,7 @@ export class InboxIssueStore implements IInboxIssueStore {
       created_by: observable,
       source: observable,
       // actions
+      acceptInboxIssue: action,
       updateInboxIssueStatus: action,
       updateInboxIssueDuplicateTo: action,
       updateInboxIssueSnoozeTill: action,
@@ -95,6 +97,47 @@ export class InboxIssueStore implements IInboxIssueStore {
       fetchIssueActivity: action,
     });
   }
+
+  acceptInboxIssue = async (targetProjectId: string, issue: Partial<TIssue>) => {
+    const previousStatus = this.status;
+    const previousIssue = clone(this.issue);
+
+    try {
+      if (!this.issue.id) return;
+
+      const inboxIssue = await this.inboxIssueService.update(this.workspaceSlug, this.projectId, this.issue.id, {
+        status: EInboxIssueStatus.ACCEPTED,
+        target_project_id: targetProjectId,
+        issue,
+      });
+
+      runInAction(() => {
+        set(this, "status", inboxIssue.status);
+        set(this, "issue", inboxIssue.issue);
+
+        if (previousStatus === EInboxIssueStatus.PENDING) {
+          const currentCount = this.store.projectRoot.project.projectMap[this.projectId]?.intake_count ?? 0;
+          set(
+            this.store.projectRoot.project.projectMap,
+            [this.projectId, "intake_count"],
+            Math.max(0, currentCount - 1)
+          );
+        }
+      });
+
+      const currentTotalResults = this.store.projectInbox.inboxIssuePaginationInfo?.total_results ?? 0;
+      const updatedCount = currentTotalResults > 0 ? currentTotalResults - 1 : currentTotalResults;
+      set(this.store.projectInbox, ["inboxIssuePaginationInfo", "total_results"], updatedCount);
+      this.store.issue.issues.addIssue([{ ...previousIssue, ...inboxIssue.issue }]);
+      return inboxIssue;
+    } catch (error) {
+      runInAction(() => {
+        set(this, "status", previousStatus);
+        set(this, "issue", previousIssue);
+      });
+      throw error;
+    }
+  };
 
   updateInboxIssueStatus = async (status: TInboxIssueStatus) => {
     const previousData: Partial<TInboxIssue> = {

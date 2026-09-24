@@ -23,7 +23,7 @@ import {
   CloseCircleFilledIcon,
 } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TNameDescriptionLoader } from "@plane/types";
+import type { TIssue, TNameDescriptionLoader } from "@plane/types";
 import { EInboxIssueStatus } from "@plane/types";
 import { ControlLink, CustomMenu, Row } from "@plane/ui";
 import { copyUrlToClipboard, findHowManyDaysLeft, generateWorkItemLink } from "@plane/utils";
@@ -132,11 +132,20 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
     }
   };
 
-  const handleInboxIssueAccept = async () => {
+  const handleInboxIssueAccept = async (payload: Partial<TIssue>) => {
     const nextOrPreviousIssueId = redirectIssue();
-    await inboxIssue?.updateInboxIssueStatus(EInboxIssueStatus.ACCEPTED);
-    setAcceptIssueModal(false);
-    handleRedirection(nextOrPreviousIssueId);
+    try {
+      await inboxIssue?.acceptInboxIssue(payload.project_id ?? projectId, payload);
+      setAcceptIssueModal(false);
+      handleRedirection(nextOrPreviousIssueId);
+    } catch (error: any) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: error?.error ?? t("issue_could_not_be_updated"),
+      });
+      throw error;
+    }
   };
 
   const handleInboxIssueDecline = async () => {
@@ -159,9 +168,8 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
 
   const handleInboxIssueDelete = async () => {
     if (!inboxIssue || !currentInboxIssueId) return;
-    await deleteInboxIssue(workspaceSlug, projectId, currentInboxIssueId).then(() => {
-      if (!isNotificationEmbed) router.push(`/${workspaceSlug}/projects/${projectId}/intake`);
-    });
+    await deleteInboxIssue(workspaceSlug, projectId, currentInboxIssueId);
+    if (!isNotificationEmbed) router.push(`/${workspaceSlug}/projects/${projectId}/intake`);
   };
 
   const handleIssueSnoozeAction = async () => {
@@ -255,6 +263,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
           isOpen={acceptIssueModal}
           onClose={() => setAcceptIssueModal(false)}
           beforeFormSubmit={handleInboxIssueAccept}
+          allowProjectSelectionOnUpdate
           withDraftIssueWrapper={false}
           fetchIssueDetails={false}
           showActionItemsOnUpdate

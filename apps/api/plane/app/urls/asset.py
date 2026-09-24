@@ -10,6 +10,7 @@ from plane.app.views import (
     UserAssetsEndpoint,
     FileAssetViewSet,
     # V2 Endpoints
+    LocalFileAssetUploadEndpoint,
     WorkspaceFileAssetEndpoint,
     UserAssetsV2Endpoint,
     StaticFileAssetEndpoint,
@@ -46,6 +47,11 @@ urlpatterns = [
         name="file-assets-restore",
     ),
     # V2 Endpoints
+    path(
+        "assets/v2/local-upload/",
+        LocalFileAssetUploadEndpoint.as_view(),
+        name="local-file-asset-upload",
+    ),
     path(
         "assets/v2/workspaces/<str:slug>/",
         WorkspaceFileAssetEndpoint.as_view(),

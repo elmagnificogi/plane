@@ -17,9 +17,7 @@ from celery import shared_task
 # Django imports
 from django.conf import settings
 from django.db.models import Prefetch
-from django.core.mail import EmailMultiAlternatives, get_connection
 from django.core.serializers.json import DjangoJSONEncoder
-from django.template.loader import render_to_string
 from django.core.exceptions import ObjectDoesNotExist
 
 # Module imports
@@ -50,8 +48,6 @@ from plane.db.models import (
     IssueAssignee,
     State,
 )
-from plane.license.utils.instance_value import get_email_configuration
-from plane.utils.email import generate_plain_text_from_html
 from plane.utils.exception_logger import log_exception
 from plane.utils.url_security import pinned_fetch
 
@@ -82,6 +78,9 @@ MODEL_MAPPER = {
 
 
 logger = logging.getLogger("plane.worker")
+
+
+WEBHOOK_RETRYABLE_STATUS_CODES = {408, 425, 429}
 
 
 def get_issue_prefetches():
@@ -169,75 +168,12 @@ def get_model_data(event: str, event_id: Union[str, List[str]], many: bool = Fal
         raise ObjectDoesNotExist(f"No {event} found with id: {event_id}")
 
 
-@shared_task
-def send_webhook_deactivation_email(webhook_id: str, receiver_id: str, current_site: str, reason: str) -> None:
-    """
-    Send an email notification when a webhook is deactivated.
-
-    Args:
-        webhook_id (str): ID of the deactivated webhook
-        receiver_id (str): ID of the user to receive the notification
-        current_site (str): Current site URL
-        reason (str): Reason for webhook deactivation
-    """
-    try:
-        (
-            EMAIL_HOST,
-            EMAIL_HOST_USER,
-            EMAIL_HOST_PASSWORD,
-            EMAIL_PORT,
-            EMAIL_USE_TLS,
-            EMAIL_USE_SSL,
-            EMAIL_FROM,
-        ) = get_email_configuration()
-
-        receiver = User.objects.get(pk=receiver_id)
-        webhook = Webhook.objects.get(pk=webhook_id)
-
-        # Get the webhook payload
-        subject = "Webhook Deactivated"
-        message = f"Webhook {webhook.url} has been deactivated due to failed requests."
-
-        # Send the mail
-        context = {
-            "email": receiver.email,
-            "message": message,
-            "webhook_url": f"{current_site}/{str(webhook.workspace.slug)}/settings/webhooks/{str(webhook.id)}",
-        }
-        html_content = render_to_string("emails/notifications/webhook-deactivate.html", context)
-        text_content = generate_plain_text_from_html(html_content)
-
-        # Set the email connection
-        connection = get_connection(
-            host=EMAIL_HOST,
-            port=int(EMAIL_PORT),
-            username=EMAIL_HOST_USER,
-            password=EMAIL_HOST_PASSWORD,
-            use_tls=EMAIL_USE_TLS == "1",
-            use_ssl=EMAIL_USE_SSL == "1",
-        )
-
-        # Create the email message
-        msg = EmailMultiAlternatives(
-            subject=subject,
-            body=text_content,
-            from_email=EMAIL_FROM,
-            to=[receiver.email],
-            connection=connection,
-        )
-        msg.attach_alternative(html_content, "text/html")
-        msg.send()
-        logger.info("Email sent successfully.")
-    except Exception as e:
-        log_exception(e, warning=True)
-        logger.error(f"Failed to send email: {e}")
-
-
 @shared_task(
     bind=True,
     autoretry_for=(requests.RequestException,),
-    retry_backoff=600,
-    max_retries=5,
+    retry_backoff=60,
+    retry_backoff_max=3600,
+    max_retries=12,
     retry_jitter=True,
 )
 def webhook_send_task(
@@ -325,19 +261,6 @@ def webhook_send_task(
             timeout=30,
         )
 
-        # Log the webhook request
-        save_webhook_log(
-            webhook=webhook,
-            request_method=action,
-            request_headers=headers,
-            request_body=payload,
-            response_status=response.status_code,
-            response_headers=response.headers,
-            response_body=response.text,
-            retry_count=self.request.retries,
-            event_type=event,
-        )
-        logger.info(f"Webhook {webhook.id} sent successfully")
     except requests.RequestException as e:
         # Log the failed webhook request
         save_webhook_log(
@@ -352,19 +275,10 @@ def webhook_send_task(
             event_type=event,
         )
         logger.error(f"Webhook {webhook.id} failed with error: {e}")
-        # Retry logic
-        if self.request.retries >= self.max_retries:
-            Webhook.objects.filter(pk=webhook.id).update(is_active=False)
-            if webhook:
-                # send email for the deactivation of the webhook
-                send_webhook_deactivation_email.delay(
-                    webhook_id=webhook.id,
-                    receiver_id=webhook.created_by_id,
-                    reason=str(e),
-                    current_site=current_site,
-                )
-            return
-        raise requests.RequestException()
+        # Celery retries this delivery, but a failed delivery must never turn
+        # off the subscription. After this event exhausts its retry window the
+        # webhook stays active, so the next event automatically tries again.
+        raise
 
     except ValueError as e:
         # SSRF validation failure (blocked/internal target or unresolvable host).
@@ -388,6 +302,38 @@ def webhook_send_task(
     except Exception as e:
         log_exception(e)
         return
+
+    # Record every HTTP response exactly once. Transport errors are recorded in
+    # the exception branch above.
+    save_webhook_log(
+        webhook=webhook,
+        request_method=action,
+        request_headers=headers,
+        request_body=payload,
+        response_status=response.status_code,
+        response_headers=response.headers,
+        response_body=response.text,
+        retry_count=self.request.retries,
+        event_type=event,
+    )
+
+    if response.status_code in WEBHOOK_RETRYABLE_STATUS_CODES or response.status_code >= 500:
+        logger.warning(
+            "Webhook %s returned retryable HTTP status %s",
+            webhook.id,
+            response.status_code,
+        )
+        raise requests.RequestException(f"Webhook returned HTTP {response.status_code}")
+
+    if response.status_code >= 400:
+        logger.warning(
+            "Webhook %s returned non-retryable HTTP status %s",
+            webhook.id,
+            response.status_code,
+        )
+        return
+
+    logger.info(f"Webhook {webhook.id} sent successfully")
 
 
 @shared_task

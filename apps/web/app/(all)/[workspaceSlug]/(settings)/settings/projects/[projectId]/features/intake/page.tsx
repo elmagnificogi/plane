@@ -14,6 +14,7 @@ import { PageHead } from "@/components/core/page-title";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
 import { ProjectSettingsFeatureControlItem } from "@/components/settings/project/content/feature-control-item";
+import { IntakeTemplateSettings } from "@/components/project/settings/intake-template-settings";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -55,6 +56,9 @@ function FeaturesIntakeSettingsPage({ params }: Route.ComponentProps) {
             value={!!currentProjectDetails?.inbox_view}
             workspaceSlug={workspaceSlug}
           />
+        </div>
+        <div className="mt-4">
+          <IntakeTemplateSettings workspaceSlug={workspaceSlug} projectId={projectId} />
         </div>
       </section>
     </SettingsContentWrapper>

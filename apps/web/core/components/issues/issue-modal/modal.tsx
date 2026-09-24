@@ -17,7 +17,7 @@ export interface IssuesModalProps {
   data?: Partial<TIssue>;
   isOpen: boolean;
   onClose: () => void;
-  beforeFormSubmit?: () => Promise<void>;
+  beforeFormSubmit?: (payload: Partial<TIssue>) => Promise<void>;
   onSubmit?: (res: TIssue) => Promise<void>;
   withDraftIssueWrapper?: boolean;
   storeType?: EIssuesStoreType;
@@ -30,6 +30,7 @@ export interface IssuesModalProps {
     loading: string;
   };
   isProjectSelectionDisabled?: boolean;
+  allowProjectSelectionOnUpdate?: boolean;
   templateId?: string;
   allowedProjectIds?: string[];
   showActionItemsOnUpdate?: boolean;

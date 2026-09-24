@@ -71,3 +71,8 @@ STORAGES = {  # noqa: F405
         "OPTIONS": {"location": os.path.join(BASE_DIR, "uploads")},  # noqa: F405
     },
 }
+
+# V2 asset APIs normally return S3/MinIO presigned forms. The single-machine
+# validation deployment has no object-storage service, so use a short-lived
+# signed API upload followed by FileSystemStorage instead.
+USE_LOCAL_FILE_STORAGE = True

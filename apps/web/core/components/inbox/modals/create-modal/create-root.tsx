@@ -15,8 +15,8 @@ import type { EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TIssue } from "@plane/types";
-import { ToggleSwitch } from "@plane/ui";
+import type { TIntakeTemplate, TIntakeTemplateConfig, TIssue } from "@plane/types";
+import { CustomSelect, ToggleSwitch } from "@plane/ui";
 import { renderFormattedPayloadDate, getTabIndex } from "@plane/utils";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
@@ -39,6 +39,7 @@ type TInboxIssueCreateRoot = {
   handleModalClose: () => void;
   isDuplicateModalOpen: boolean;
   handleDuplicateIssueModal: (value: boolean) => void;
+  templateConfig?: TIntakeTemplateConfig;
 };
 
 export const defaultIssueData: Partial<TIssue> = {
@@ -53,8 +54,73 @@ export const defaultIssueData: Partial<TIssue> = {
   target_date: "",
 };
 
+const NONE_TEMPLATE_ID = "none";
+
+const renderInlineMarkdown = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+const markdownToHtml = (value: string) => {
+  if (!value.trim()) return "";
+
+  const html: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = null;
+  };
+
+  for (const line of value.split(/\r?\n/)) {
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    const unorderedItem = /^[-*]\s+(.+)$/.exec(line);
+    const orderedItem = /^\d+\.\s+(.+)$/.exec(line);
+
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+    } else if (unorderedItem || orderedItem) {
+      const nextListType = unorderedItem ? "ul" : "ol";
+      if (listType !== nextListType) {
+        closeList();
+        listType = nextListType;
+        html.push(`<${listType}>`);
+      }
+      html.push(`<li>${renderInlineMarkdown((unorderedItem ?? orderedItem)?.[1] ?? "")}</li>`);
+    } else if (line.startsWith("> ")) {
+      closeList();
+      html.push(`<blockquote><p>${renderInlineMarkdown(line.slice(2))}</p></blockquote>`);
+    } else if (line.trim()) {
+      closeList();
+      html.push(`<p>${renderInlineMarkdown(line)}</p>`);
+    } else {
+      closeList();
+    }
+  }
+  closeList();
+  return html.join("");
+};
+
+const getTemplateIssueData = (template?: TIntakeTemplate): Partial<TIssue> => {
+  return {
+    ...defaultIssueData,
+    description_html: template ? markdownToHtml(template.description) : "",
+  };
+};
+
 export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props: TInboxIssueCreateRoot) {
-  const { workspaceSlug, projectId, handleModalClose } = props;
+  const { workspaceSlug, projectId, handleModalClose, templateConfig } = props;
+  const defaultTemplate = templateConfig?.templates.find(
+    (template) => template.id === templateConfig.default_template_id
+  );
   // states
   const [uploadedAssetIds, setUploadedAssetIds] = useState<string[]>([]);
   // router
@@ -73,7 +139,9 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
   // states
   const [createMore, setCreateMore] = useState<boolean>(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formData, setFormData] = useState<Partial<TIssue>>(defaultIssueData);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate?.id ?? NONE_TEMPLATE_ID);
+  const [descriptionEditorKey, setDescriptionEditorKey] = useState(0);
+  const [formData, setFormData] = useState<Partial<TIssue>>(() => getTemplateIssueData(defaultTemplate));
   const handleFormData = useCallback(
     <T extends keyof Partial<TIssue>>(issueKey: T, issueValue: Partial<TIssue>[T]) => {
       setFormData({
@@ -85,6 +153,13 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
   );
 
   const { getIndex } = getTabIndex(ETabIndices.INTAKE_ISSUE_FORM, isMobile);
+
+  const handleTemplateChange = (templateId: string) => {
+    const template = templateConfig?.templates.find((item) => item.id === templateId);
+    setSelectedTemplateId(templateId);
+    setFormData({ ...getTemplateIssueData(template), name: formData.name });
+    setDescriptionEditorKey((current) => current + 1);
+  };
 
   const handleEscKeyDown = (event: KeyboardEvent) => {
     if (descriptionEditorRef.current?.isEditorReadyToDiscard()) {
@@ -155,7 +230,9 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
           handleModalClose();
         } else {
           descriptionEditorRef?.current?.clearEditor();
-          setFormData(defaultIssueData);
+          const selectedTemplate = templateConfig?.templates.find((template) => template.id === selectedTemplateId);
+          setFormData(getTemplateIssueData(selectedTemplate));
+          setDescriptionEditorKey((current) => current + 1);
         }
         setToast({
           type: TOAST_TYPE.SUCCESS,
@@ -184,6 +261,28 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
           <div className="space-y-5 rounded-t-lg bg-surface-1 p-5">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-18 font-medium text-secondary">{t("inbox_issue.modal.title")}</h3>
+              {templateConfig && templateConfig.templates.length > 0 && (
+                <CustomSelect
+                  value={selectedTemplateId}
+                  label={
+                    defaultTemplate?.id === selectedTemplateId
+                      ? `${defaultTemplate.name} · ${t("common.default")}`
+                      : (templateConfig.templates.find((template) => template.id === selectedTemplateId)?.name ??
+                        t("common.none"))
+                  }
+                  onChange={(value: string) => handleTemplateChange(value)}
+                  buttonClassName="max-w-64 border border-subtle-1"
+                  input
+                >
+                  <CustomSelect.Option value={NONE_TEMPLATE_ID}>{t("common.none")}</CustomSelect.Option>
+                  {templateConfig.templates.map((template) => (
+                    <CustomSelect.Option key={template.id} value={template.id}>
+                      {template.name}
+                      {template.id === templateConfig.default_template_id ? ` · ${t("common.default")}` : ""}
+                    </CustomSelect.Option>
+                  ))}
+                </CustomSelect>
+              )}
             </div>
             <div className="space-y-3">
               <InboxIssueTitle
@@ -192,6 +291,7 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
                 isTitleLengthMoreThan255Character={isTitleLengthMoreThan255Character}
               />
               <InboxIssueDescription
+                key={descriptionEditorKey}
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 workspaceId={workspaceId}
