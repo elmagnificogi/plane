@@ -77,6 +77,57 @@ explicit English fallbacks for Plane's other locales. See the
 complete transition matrix, compatibility contract, webhook behavior, and local
 verification setup.
 
+## 🧩 Additional fork enhancements
+
+The fork also includes a set of small, upgrade-friendly improvements around
+Intake, cross-project collaboration, local deployment, and notifications:
+
+- **Project-managed Intake templates**
+  Project administrators can maintain up to 20 Markdown request templates from
+  **Project settings → Features → Intake** and optionally choose a default.
+  Members can select a template—or create without one—while titles and normal
+  Plane properties remain user-entered. Existing Intake data is unchanged. See
+  [Intake templates](./docs/intake-templates.md).
+
+- **Accept Intake work into another project**
+  An administrator can accept an Intake submission into any project in the same
+  workspace where they may create work items. Plane preserves the work-item UUID
+  and portable history while safely clearing project-specific state. Omitting a
+  destination retains Plane's original same-project behavior. See
+  [cross-project Intake acceptance](./docs/intake-cross-project-acceptance.md).
+
+- **Read-only cross-project relation summaries**
+  Plane's native workspace-wide relation search can link business work items to
+  test tickets in another project. The source item displays the related
+  project's identifier and current state, but does not expose controls that edit
+  the target item. No project allowlist or automatic completion gate is added.
+  See [cross-project relations](./docs/cross-project-relations.md).
+
+- **Reliable webhook recovery**
+  Temporary network failures and retryable HTTP responses use exponential
+  backoff instead of automatically disabling the webhook. A failed event can
+  exhaust its retry window without preventing future events from reconnecting.
+  See [webhook delivery retries](./docs/webhook-delivery-retries.md).
+
+- **Single-machine local file uploads**
+  The `plane.settings.workflow_local` profile supports signed API uploads through
+  Django storage when S3 or MinIO is unavailable. Standard production and
+  container deployments keep Plane's existing object-storage flow. See
+  [local asset storage](./docs/local-asset-storage.md).
+
+- **Simplified Chinese by default**
+  New profiles and clients without an explicit language preference default to
+  Simplified Chinese (`zh-CN`). Existing users keep their selected language. See
+  [default interface language](./docs/default-language.md).
+
+- **Direct exit from notifications**
+  The workspace notification inbox includes a back arrow that returns directly
+  to the current workspace home. See
+  [notification inbox navigation](./docs/notification-inbox-back-navigation.md).
+
+These changes use additive fields and migrations where persistence is needed,
+so an existing Plane database can be upgraded without rebuilding the instance.
+
 ## 🚀 Installation
 
 Getting started with Plane is simple. Choose the setup that works best for you:
