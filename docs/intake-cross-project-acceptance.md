@@ -29,3 +29,8 @@ transaction. The target must belong to the same workspace, have a default
 non-triage state, and grant the actor create permission. Calls without
 `target_project_id` remain backward-compatible and accept into the source
 project.
+
+Decline is not terminal. A project admin can accept a declined Intake work item
+later through the same acceptance flow, including a different target project.
+The work item stays in the closed Intake list and changes from declined to
+accepted. Accepted and duplicate items still have no further status change.

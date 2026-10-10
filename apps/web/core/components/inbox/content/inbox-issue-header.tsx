@@ -74,7 +74,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   const [declineIssueModal, setDeclineIssueModal] = useState(false);
   const [deleteIssueModal, setDeleteIssueModal] = useState(false);
   // store
-  const { currentTab, deleteInboxIssue, filteredInboxIssueIds } = useProjectInbox();
+  const { currentTab, deleteInboxIssue, filteredInboxIssueIds, inboxFilters } = useProjectInbox();
   const { data: currentUser } = useUser();
   const { allowPermissions } = useUserPermissions();
   const { getPartialProjectById } = useProject();
@@ -93,7 +93,11 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
     projectId
   );
   const canMarkAsDuplicate = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
-  const canMarkAsAccepted = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
+  const canMarkAsAccepted =
+    isAllowed &&
+    (inboxIssue?.status === EInboxIssueStatus.PENDING ||
+      inboxIssue?.status === EInboxIssueStatus.SNOOZED ||
+      inboxIssue?.status === EInboxIssueStatus.DECLINED);
   const canMarkAsDeclined = isAllowed && (inboxIssue?.status === 0 || inboxIssue?.status === -2);
   // can delete only if admin or is creator of the issue
   const canDelete =
@@ -133,11 +137,16 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   };
 
   const handleInboxIssueAccept = async (payload: Partial<TIssue>) => {
-    const nextOrPreviousIssueId = redirectIssue();
+    const previousStatus = inboxIssue?.status;
+    const staysInCurrentList =
+      previousStatus !== undefined &&
+      !!inboxFilters?.status?.includes(previousStatus) &&
+      !!inboxFilters.status.includes(EInboxIssueStatus.ACCEPTED);
+    const nextOrPreviousIssueId = staysInCurrentList ? undefined : redirectIssue();
     try {
       await inboxIssue?.acceptInboxIssue(payload.project_id ?? projectId, payload);
       setAcceptIssueModal(false);
-      handleRedirection(nextOrPreviousIssueId);
+      if (!staysInCurrentList) handleRedirection(nextOrPreviousIssueId);
     } catch (error: any) {
       setToast({
         type: TOAST_TYPE.ERROR,

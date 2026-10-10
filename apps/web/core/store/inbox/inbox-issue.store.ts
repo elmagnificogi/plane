@@ -125,9 +125,14 @@ export class InboxIssueStore implements IInboxIssueStore {
         }
       });
 
-      const currentTotalResults = this.store.projectInbox.inboxIssuePaginationInfo?.total_results ?? 0;
-      const updatedCount = currentTotalResults > 0 ? currentTotalResults - 1 : currentTotalResults;
-      set(this.store.projectInbox, ["inboxIssuePaginationInfo", "total_results"], updatedCount);
+      const statusFilters = this.store.projectInbox.inboxFilters?.status;
+      const staysInCurrentList =
+        !!statusFilters?.includes(previousStatus) && statusFilters.includes(EInboxIssueStatus.ACCEPTED);
+      if (!staysInCurrentList) {
+        const currentTotalResults = this.store.projectInbox.inboxIssuePaginationInfo?.total_results ?? 0;
+        const updatedCount = currentTotalResults > 0 ? currentTotalResults - 1 : currentTotalResults;
+        set(this.store.projectInbox, ["inboxIssuePaginationInfo", "total_results"], updatedCount);
+      }
       this.store.issue.issues.addIssue([{ ...previousIssue, ...inboxIssue.issue }]);
       return inboxIssue;
     } catch (error) {

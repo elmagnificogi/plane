@@ -242,6 +242,31 @@ class TestIntakeCrossProjectAcceptance:
         assert issue.sequence_id == original_sequence
         assert intake_issue.status == 1
 
+    def test_accept_declined_intake_issue(
+        self,
+        session_client,
+        workspace,
+        intake_projects,
+    ):
+        source_project = intake_projects["source"]
+        issue = intake_projects["issue"]
+        intake_issue = intake_projects["intake_issue"]
+        intake_issue.status = -1
+        intake_issue.save(update_fields=["status"])
+
+        response = session_client.patch(
+            self.get_url(workspace.slug, source_project.id, issue.id),
+            {"status": 1},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        issue.refresh_from_db()
+        intake_issue.refresh_from_db()
+        assert intake_issue.status == 1
+        assert issue.project_id == source_project.id
+        assert issue.state_id == intake_projects["source_default_state"].id
+
     def test_accept_rejects_target_without_create_permission(
         self,
         session_client,
