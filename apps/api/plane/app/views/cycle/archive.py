@@ -32,6 +32,7 @@ from rest_framework.response import Response
 from plane.app.permissions import allow_permission, ROLE
 from plane.db.models import Cycle, UserFavorite, Issue, Label, User, Project
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.cycle_stats import exclude_triage_issues, strip_triage_from_cycle_payload
 
 # Module imports
 from .. import BaseAPIView
@@ -106,7 +107,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                 estimate_point__estimate__type="points",
                 issue_cycle__cycle_id=OuterRef("pk"),
                 issue_cycle__deleted_at__isnull=True,
-            )
+            ).exclude(state__group="triage")
             .values("issue_cycle__cycle_id")
             .annotate(total_estimate_points=Sum(Cast("estimate_point__value", FloatField())))
             .values("total_estimate_points")[:1]
@@ -142,7 +143,8 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                         issue_cycle__issue__archived_at__isnull=True,
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__issue__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .annotate(
@@ -301,7 +303,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     "archived_at",
                 )
             ).order_by("-is_favorite", "-created_at")
-            return Response(queryset, status=status.HTTP_200_OK)
+            return Response(strip_triage_from_cycle_payload(list(queryset)), status=status.HTTP_200_OK)
         else:
             queryset = self.get_queryset().filter(archived_at__isnull=False).filter(pk=pk)
             data = (
@@ -371,6 +373,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                         workspace__slug=slug,
                         project_id=project_id,
                     )
+                    .exclude(state__group="triage")
                     .annotate(display_name=F("assignees__display_name"))
                     .annotate(assignee_id=F("assignees__id"))
                     .annotate(
@@ -425,6 +428,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                         workspace__slug=slug,
                         project_id=project_id,
                     )
+                    .exclude(state__group="triage")
                     .annotate(label_name=F("labels__name"))
                     .annotate(color=F("labels__color"))
                     .annotate(label_id=F("labels__id"))
@@ -475,6 +479,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                .exclude(state__group="triage")
                 .annotate(first_name=F("assignees__first_name"))
                 .annotate(last_name=F("assignees__last_name"))
                 .annotate(assignee_id=F("assignees__id"))
@@ -538,6 +543,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                .exclude(state__group="triage")
                 .annotate(label_name=F("labels__name"))
                 .annotate(color=F("labels__color"))
                 .annotate(label_id=F("labels__id"))
@@ -581,7 +587,7 @@ class CycleArchiveUnarchiveEndpoint(BaseAPIView):
                     cycle_id=pk,
                 )
 
-            return Response(data, status=status.HTTP_200_OK)
+            return Response(strip_triage_from_cycle_payload(data), status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def post(self, request, slug, project_id, cycle_id):

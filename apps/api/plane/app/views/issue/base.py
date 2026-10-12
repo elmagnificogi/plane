@@ -44,6 +44,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.issue_description_version_task import issue_description_version_task
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.bgtasks.webhook_task import model_activity
+from plane.utils.workflow import complete_descendant_issues
 from plane.db.models import (
     CycleIssue,
     FileAsset,
@@ -630,6 +631,10 @@ class IssueViewSet(BaseViewSet):
         queryset = self.apply_annotations(queryset)
 
         skip_activity = request.data.pop("skip_activity", False)
+        complete_descendants = request.data.pop("complete_descendants", False)
+        if isinstance(complete_descendants, list):
+            complete_descendants = complete_descendants[-1] if complete_descendants else False
+        complete_descendants = complete_descendants is True or complete_descendants == "true"
         is_description_update = request.data.get("description_html") is not None
 
         issue = (
@@ -689,6 +694,15 @@ class IssueViewSet(BaseViewSet):
         )
         if serializer.is_valid():
             serializer.save()
+            cascade_result = None
+            if complete_descendants:
+                issue.refresh_from_db()
+                cascade_result = complete_descendant_issues(
+                    issue=issue,
+                    actor_id=request.user.id,
+                    slug=slug,
+                    origin=base_host(request=request, is_app=True),
+                )
             # Check if the update is a migration description update
             is_migration_description_update = skip_activity and is_description_update
             # Log all the updates
@@ -719,6 +733,8 @@ class IssueViewSet(BaseViewSet):
                     issue_id=str(serializer.data.get("id", None)),
                     user_id=request.user.id,
                 )
+            if cascade_result is not None:
+                return Response(cascade_result, status=status.HTTP_200_OK)
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

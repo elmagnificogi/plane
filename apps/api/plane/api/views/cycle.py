@@ -46,6 +46,7 @@ from plane.db.models import (
     ProjectMember,
     UserFavorite,
 )
+from plane.utils.cycle_stats import exclude_triage_issues
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.order_queryset import CYCLE_ORDER_BY_ALLOWLIST, ISSUE_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.host import base_host
@@ -106,7 +107,8 @@ class CycleListCreateAPIEndpoint(BaseAPIView):
                         issue_cycle__issue__archived_at__isnull=True,
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .annotate(
@@ -434,7 +436,8 @@ class CycleDetailAPIEndpoint(BaseAPIView):
                         issue_cycle__issue__archived_at__isnull=True,
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .annotate(
@@ -684,7 +687,8 @@ class CycleArchiveUnarchiveAPIEndpoint(BaseAPIView):
                         issue_cycle__issue__archived_at__isnull=True,
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .annotate(

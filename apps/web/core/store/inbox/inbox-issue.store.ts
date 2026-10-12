@@ -16,6 +16,11 @@ import type {
 import { EInboxIssueStatus } from "@plane/types";
 // helpers
 // services
+import {
+  confirmDescendantCompletion,
+  markDescendantCompletion,
+  notifyDescendantCompletionFailures,
+} from "@/components/issues/descendant-completion/prompt";
 import { InboxIssueService } from "@/services/inbox";
 import { IssueService } from "@/services/issue";
 // store
@@ -287,11 +292,38 @@ export class InboxIssueStore implements IInboxIssueStore {
     const inboxIssue = clone(this.issue);
     try {
       if (!this.issue.id) return;
+      const targetState = issue.state_id ? this.store.state.getStateById(issue.state_id) : undefined;
+      const mayCompleteDescendants = !targetState || targetState.group === "completed";
+      let shouldCompleteDescendants = false;
+      if (issue.state_id && mayCompleteDescendants && inboxIssue?.state_id !== issue.state_id) {
+        shouldCompleteDescendants = await confirmDescendantCompletion({
+          workspaceSlug: this.workspaceSlug,
+          projectId: this.projectId,
+          issueId: this.issue.id,
+          stateId: issue.state_id,
+        });
+      }
       Object.keys(issue).forEach((key) => {
         const issueKey = key as keyof TIssue;
         set(this.issue, issueKey, issue[issueKey]);
       });
-      await this.issueService.patchIssue(this.workspaceSlug, this.projectId, this.issue.id, issue);
+      if (shouldCompleteDescendants) markDescendantCompletion(this.issue.id);
+      const updateResponse = await this.issueService.patchIssue(
+        this.workspaceSlug,
+        this.projectId,
+        this.issue.id,
+        issue
+      );
+      if (updateResponse?.completed_issue_ids?.length && updateResponse.done_state_id) {
+        updateResponse.completed_issue_ids.forEach((completedIssueId: string) => {
+          this.store.issue.issues.updateIssue(completedIssueId, { state_id: updateResponse.done_state_id });
+        });
+      }
+      if (updateResponse?.failed?.length) {
+        notifyDescendantCompletionFailures(
+          updateResponse.failed.map((failedIssue: { name?: string; id: string }) => failedIssue.name || failedIssue.id)
+        );
+      }
       if (issue.cycle_id) {
         await this.store.issue.issueDetail.addIssueToCycle(this.workspaceSlug, this.projectId, issue.cycle_id, [
           this.issue.id,

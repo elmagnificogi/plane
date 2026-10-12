@@ -221,7 +221,7 @@
         "backlog": "Backlog",
         "todo": "Todo",
         "in_progress": "In Progress",
-        "waiting_for_test": "Waiting for Test",
+        "waiting_for_test": "Development complete",
         "testing": "Testing",
         "done_or_delayed_done": "Done / Delayed Done"
       },
@@ -253,6 +253,14 @@
           "error_title": "Save failed",
           "error_message": "Check that the member still belongs to the project."
         }
+      },
+      "descendant_completion": {
+        "title": "Finalizare elemente secundare",
+        "content": "Marcați și elementele secundare ca finalizate?",
+        "confirm": "Da",
+        "decline": "Nu",
+        "failure_title": "Unele elemente secundare au rămas neschimbate",
+        "failure_message": "{names} au rămas în starea actuală."
       }
     },
     "empty_state": {

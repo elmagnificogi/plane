@@ -61,6 +61,8 @@ export interface IIssueSubIssuesStore extends IIssueSubIssuesStoreActions {
   // actions
   fetchOtherProjectProperties: (workspaceSlug: string, projectIds: string[]) => Promise<void>;
   setSubIssueHelpers: (parentIssueId: string, key: TSubIssueHelpersKeys, value: string) => void;
+  addSubIssueHelper: (parentIssueId: string, key: TSubIssueHelpersKeys, value: string) => void;
+  removeSubIssueHelper: (parentIssueId: string, key: TSubIssueHelpersKeys, value: string) => void;
 }
 
 export class IssueSubIssuesStore implements IIssueSubIssuesStore {
@@ -86,6 +88,8 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
       loader: observable.ref,
       // actions
       setSubIssueHelpers: action,
+      addSubIssueHelper: action,
+      removeSubIssueHelper: action,
       fetchSubIssues: action,
       createSubIssues: action,
       updateSubIssue: action,
@@ -123,6 +127,20 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
       if (_subIssueHelpers.includes(value)) return pull(_subIssueHelpers, value);
       return concat(_subIssueHelpers, value);
     });
+  };
+
+  addSubIssueHelper = (parentIssueId: string, key: TSubIssueHelpersKeys, value: string) => {
+    if (!parentIssueId || !key || !value) return;
+
+    update(this.subIssueHelpers, [parentIssueId, key], (current: string[] = []) =>
+      current.includes(value) ? current : concat(current, value)
+    );
+  };
+
+  removeSubIssueHelper = (parentIssueId: string, key: TSubIssueHelpersKeys, value: string) => {
+    if (!parentIssueId || !key || !value) return;
+
+    update(this.subIssueHelpers, [parentIssueId, key], (current: string[] = []) => pull(current, value));
   };
 
   fetchSubIssues = async (workspaceSlug: string, projectId: string, parentIssueId: string) => {
@@ -186,10 +204,10 @@ export class IssueSubIssuesStore implements IIssueSubIssuesStore {
         });
       });
 
-      const issueIds = subIssues.map((issue) => issue.id);
+      const createdIssueIds = subIssues.map((issue) => issue.id);
       update(this.subIssues, [parentIssueId], (issues) => {
-        if (!issues) return issueIds;
-        return concat(issues, issueIds);
+        if (!issues) return createdIssueIds;
+        return concat(issues, createdIssueIds);
       });
     });
 

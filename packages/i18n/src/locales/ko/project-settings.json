@@ -221,7 +221,7 @@
         "backlog": "Backlog",
         "todo": "Todo",
         "in_progress": "In Progress",
-        "waiting_for_test": "Waiting for Test",
+        "waiting_for_test": "Development complete",
         "testing": "Testing",
         "done_or_delayed_done": "Done / Delayed Done"
       },
@@ -253,6 +253,14 @@
           "error_title": "Save failed",
           "error_message": "Check that the member still belongs to the project."
         }
+      },
+      "descendant_completion": {
+        "title": "하위 작업 완료",
+        "content": "하위 작업도 완료로 변경하시겠습니까?",
+        "confirm": "예",
+        "decline": "아니요",
+        "failure_title": "일부 하위 작업은 변경되지 않았습니다",
+        "failure_message": "{names}은(는) 원래 상태를 유지했습니다."
       }
     },
     "empty_state": {

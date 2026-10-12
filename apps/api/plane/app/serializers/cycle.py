@@ -9,6 +9,7 @@ from rest_framework import serializers
 from .base import BaseSerializer
 from .issue import IssueStateSerializer
 from plane.db.models import Cycle, CycleIssue, CycleUserProperties
+from plane.utils.cycle_stats import snapshot_without_triage
 from plane.utils.timezone_converter import convert_to_utc
 
 
@@ -87,6 +88,12 @@ class CycleSerializer(BaseSerializer):
             "status",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if "progress_snapshot" in data:
+            data["progress_snapshot"] = snapshot_without_triage(data.get("progress_snapshot"))
+        return data
 
 
 class CycleIssueSerializer(BaseSerializer):

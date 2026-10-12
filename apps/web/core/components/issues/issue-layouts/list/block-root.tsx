@@ -4,8 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import type { MutableRefObject } from "react";
-import React, { useEffect, useRef, useState } from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { attachInstruction, extractInstruction } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
@@ -24,6 +24,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
+import { isWorkItemExpanded, setWorkItemExpanded } from "../expanded-work-items";
 import { HIGHLIGHT_CLASS, getIssueBlockId, isIssueNew } from "../utils";
 import { IssueBlock } from "./block";
 import type { TRenderQuickActions } from "./list-view-types";
@@ -69,7 +70,17 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
     isEpic = false,
   } = props;
   // states
-  const [isExpanded, setExpanded] = useState<boolean>(false);
+  const [isExpanded, setExpandedState] = useState<boolean>(() => isWorkItemExpanded(issueId));
+  const setExpanded = useCallback<Dispatch<SetStateAction<boolean>>>(
+    (value) => {
+      setExpandedState((previous) => {
+        const next = typeof value === "function" ? value(previous) : value;
+        setWorkItemExpanded(issueId, next);
+        return next;
+      });
+    },
+    [issueId]
+  );
   const [instruction, setInstruction] = useState<"DRAG_OVER" | "DRAG_BELOW" | undefined>(undefined);
   const [isCurrentBlockDragging, setIsCurrentBlockDragging] = useState(false);
   // ref

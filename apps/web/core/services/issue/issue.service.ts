@@ -19,6 +19,7 @@ import type {
   TIssueSubIssues,
 } from "@plane/types";
 // services
+import { consumeDescendantCompletion } from "@/components/issues/descendant-completion/prompt";
 import { APIService } from "@/services/api.service";
 
 export class IssueService extends APIService {
@@ -224,7 +225,8 @@ export class IssueService extends APIService {
   }
 
   async patchIssue(workspaceSlug: string, projectId: string, issueId: string, data: Partial<TIssue>): Promise<any> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, data)
+    const payload = consumeDescendantCompletion(issueId) ? { ...data, complete_descendants: true } : data;
+    return this.patch(`/api/workspaces/${workspaceSlug}/projects/${projectId}/${this.serviceType}/${issueId}/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;

@@ -221,7 +221,7 @@
         "backlog": "待规划",
         "todo": "待办",
         "in_progress": "进行中",
-        "waiting_for_test": "等待测试",
+        "waiting_for_test": "开发完成",
         "testing": "测试中",
         "done_or_delayed_done": "完成 / 延期完成"
       },
@@ -253,6 +253,14 @@
           "error_title": "保存失败",
           "error_message": "请检查成员是否仍在项目中。"
         }
+      },
+      "descendant_completion": {
+        "title": "完成子任务",
+        "content": "是否将子任务一并改为完成？",
+        "confirm": "是",
+        "decline": "否",
+        "failure_title": "部分子任务未改为完成",
+        "failure_message": "{names} 保持了原来的状态。"
       }
     },
     "empty_state": {

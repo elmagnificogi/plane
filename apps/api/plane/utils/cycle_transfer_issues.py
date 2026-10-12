@@ -28,6 +28,7 @@ from plane.db.models import (
     Project,
 )
 from plane.utils.analytics_plot import burndown_plot
+from plane.utils.cycle_stats import exclude_triage_issues
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.utils.host import base_host
 
@@ -75,7 +76,8 @@ def transfer_cycle_issues(
                     issue_cycle__issue__is_draft=False,
                     issue_cycle__deleted_at__isnull=True,
                     issue_cycle__issue__deleted_at__isnull=True,
-                ),
+                )
+                & exclude_triage_issues(),
             )
         )
         .annotate(
@@ -167,7 +169,7 @@ def transfer_cycle_issues(
                 issue_cycle__deleted_at__isnull=True,
                 workspace__slug=slug,
                 project_id=project_id,
-            )
+            ).exclude(state__group="triage")
             .annotate(display_name=F("assignees__display_name"))
             .annotate(assignee_id=F("assignees__id"))
             .annotate(
@@ -233,7 +235,7 @@ def transfer_cycle_issues(
                 issue_cycle__deleted_at__isnull=True,
                 workspace__slug=slug,
                 project_id=project_id,
-            )
+            ).exclude(state__group="triage")
             .annotate(label_name=F("labels__name"))
             .annotate(color=F("labels__color"))
             .annotate(label_id=F("labels__id"))
@@ -289,7 +291,7 @@ def transfer_cycle_issues(
             issue_cycle__deleted_at__isnull=True,
             workspace__slug=slug,
             project_id=project_id,
-        )
+        ).exclude(state__group="triage")
         .annotate(display_name=F("assignees__display_name"))
         .annotate(assignee_id=F("assignees__id"))
         .annotate(
@@ -353,7 +355,7 @@ def transfer_cycle_issues(
             issue_cycle__deleted_at__isnull=True,
             workspace__slug=slug,
             project_id=project_id,
-        )
+        ).exclude(state__group="triage")
         .annotate(label_name=F("labels__name"))
         .annotate(color=F("labels__color"))
         .annotate(label_id=F("labels__id"))

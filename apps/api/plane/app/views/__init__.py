@@ -240,4 +240,8 @@ from .user.base import AccountEndpoint, ProfileEndpoint, UserSessionEndpoint
 
 from .timezone.base import TimezoneEndpoint
 
-from .workflow import IssueWorkflowTransitionsEndpoint, ProjectWorkflowEndpoint
+from .workflow import (
+    IssueDescendantCompletionEndpoint,
+    IssueWorkflowTransitionsEndpoint,
+    ProjectWorkflowEndpoint,
+)

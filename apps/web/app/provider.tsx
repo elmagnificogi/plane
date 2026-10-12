@@ -14,6 +14,7 @@ import { Toast } from "@plane/propel/toast";
 // helpers
 import { resolveGeneralTheme } from "@plane/utils";
 // mobx store provider
+import { DescendantCompletionPromptModal } from "@/components/issues/descendant-completion/prompt-modal";
 import { StoreProvider } from "@/lib/store-context";
 
 // lazy imports
@@ -44,6 +45,7 @@ export function AppProvider(props: IAppProvider) {
         <AppProgressBar />
         <TranslationProvider>
           <Toast theme={resolveGeneralTheme(resolvedTheme)} />
+          <DescendantCompletionPromptModal />
           <StoreWrapper>
             <InstanceWrapper>
               <Suspense>

@@ -221,7 +221,7 @@
         "backlog": "待規劃",
         "todo": "待辦",
         "in_progress": "進行中",
-        "waiting_for_test": "等待測試",
+        "waiting_for_test": "開發完成",
         "testing": "測試中",
         "done_or_delayed_done": "完成 / 延期完成"
       },
@@ -253,6 +253,14 @@
           "error_title": "儲存失敗",
           "error_message": "請檢查成員是否仍在專案中。"
         }
+      },
+      "descendant_completion": {
+        "title": "完成子任務",
+        "content": "是否將子任務一併改為完成？",
+        "confirm": "是",
+        "decline": "否",
+        "failure_title": "部分子任務未改為完成",
+        "failure_message": "{names} 保持了原來的狀態。"
       }
     },
     "empty_state": {

@@ -131,13 +131,17 @@ def burndown_plot(queryset, slug, project_id, plot_type, cycle_id=None, module_i
         estimate__type="points",
     ).exists()
     if estimate_type and plot_type == "points" and cycle_id:
-        issue_estimates = Issue.issue_objects.filter(
-            workspace__slug=slug,
-            project_id=project_id,
-            issue_cycle__cycle_id=cycle_id,
-            issue_cycle__deleted_at__isnull=True,
-            estimate_point__isnull=False,
-        ).values_list("estimate_point__value", flat=True)
+        issue_estimates = (
+            Issue.issue_objects.filter(
+                workspace__slug=slug,
+                project_id=project_id,
+                issue_cycle__cycle_id=cycle_id,
+                issue_cycle__deleted_at__isnull=True,
+                estimate_point__isnull=False,
+            )
+            .exclude(state__group="triage")
+            .values_list("estimate_point__value", flat=True)
+        )
 
         issue_estimates = [float(value) for value in issue_estimates]
         total_estimate_points = sum(issue_estimates)

@@ -15,6 +15,8 @@ import { Collapsible } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { SubIssuesListItem } from "./list-item";
 
+const subIssueGroupOpenState = new Map<string, boolean>();
+
 interface TSubIssuesListGroupProps {
   workItemIds: string[];
   projectId: string;
@@ -51,9 +53,10 @@ export const SubIssuesListGroup = observer(function SubIssuesListGroup(props: TS
   } = props;
 
   const isAllIssues = group.id === ALL_ISSUES;
+  const openStateKey = `${rootIssueId}:${group.id}`;
 
   // states
-  const [isCollapsibleOpen, setIsCollapsibleOpen] = useState(true);
+  const [isCollapsibleOpen, setIsCollapsibleOpen] = useState(() => subIssueGroupOpenState.get(openStateKey) ?? true);
 
   if (!workItemIds.length) return null;
 
@@ -61,7 +64,13 @@ export const SubIssuesListGroup = observer(function SubIssuesListGroup(props: TS
     <>
       <Collapsible
         isOpen={isCollapsibleOpen}
-        onToggle={() => setIsCollapsibleOpen(!isCollapsibleOpen)}
+        onToggle={() =>
+          setIsCollapsibleOpen((current) => {
+            const next = !current;
+            subIssueGroupOpenState.set(openStateKey, next);
+            return next;
+          })
+        }
         title={
           !isAllIssues && (
             <div className="flex items-center gap-2 p-3">

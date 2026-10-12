@@ -55,6 +55,7 @@ from plane.db.models import (
 from plane.utils.analytics_plot import burndown_plot
 from plane.bgtasks.recent_visited_task import recent_visited_task
 from plane.utils.host import base_host
+from plane.utils.cycle_stats import exclude_triage_issues, snapshot_without_triage, strip_triage_from_cycle_payload
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from .. import BaseAPIView, BaseViewSet
 from plane.bgtasks.webhook_task import model_activity
@@ -120,7 +121,8 @@ class CycleViewSet(BaseViewSet):
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__deleted_at__isnull=True,
                         issue_cycle__issue__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .annotate(
@@ -234,7 +236,7 @@ class CycleViewSet(BaseViewSet):
             data = user_timezone_converter(data, datetime_fields, project_timezone)
 
             if data:
-                return Response(data, status=status.HTTP_200_OK)
+                return Response(strip_triage_from_cycle_payload(data), status=status.HTTP_200_OK)
 
         data = queryset.values(
             # necessary fields
@@ -265,7 +267,7 @@ class CycleViewSet(BaseViewSet):
         )
         datetime_fields = ["start_date", "end_date"]
         data = user_timezone_converter(data, datetime_fields, project_timezone)
-        return Response(data, status=status.HTTP_200_OK)
+        return Response(strip_triage_from_cycle_payload(data), status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def create(self, request, slug, project_id):
@@ -312,7 +314,9 @@ class CycleViewSet(BaseViewSet):
                 project_timezone = project.timezone
 
                 datetime_fields = ["start_date", "end_date"]
-                cycle = user_timezone_converter(cycle, datetime_fields, project_timezone)
+                cycle = strip_triage_from_cycle_payload(
+                    user_timezone_converter(cycle, datetime_fields, project_timezone)
+                )
 
                 # Send the model activity
                 model_activity.delay(
@@ -391,7 +395,9 @@ class CycleViewSet(BaseViewSet):
             project_timezone = project.timezone
 
             datetime_fields = ["start_date", "end_date"]
-            cycle = user_timezone_converter(cycle, datetime_fields, project_timezone)
+            cycle = strip_triage_from_cycle_payload(
+                user_timezone_converter(cycle, datetime_fields, project_timezone)
+            )
 
             # Send the model activity
             model_activity.delay(
@@ -463,7 +469,7 @@ class CycleViewSet(BaseViewSet):
         project = Project.objects.get(id=self.kwargs.get("project_id"))
         project_timezone = project.timezone
         datetime_fields = ["start_date", "end_date"]
-        data = user_timezone_converter(data, datetime_fields, project_timezone)
+        data = strip_triage_from_cycle_payload(user_timezone_converter(data, datetime_fields, project_timezone))
 
         recent_visited_task.delay(
             slug=slug,
@@ -668,7 +674,7 @@ class CycleProgressEndpoint(BaseAPIView):
                 issue_cycle__deleted_at__isnull=True,
                 workspace__slug=slug,
                 project_id=project_id,
-            )
+            ).exclude(state__group="triage")
             .annotate(value_as_float=Cast("estimate_point__value", FloatField()))
             .aggregate(
                 backlog_estimate_point=Sum(
@@ -710,12 +716,13 @@ class CycleProgressEndpoint(BaseAPIView):
             )
         )
         if cycle.progress_snapshot:
-            backlog_issues = cycle.progress_snapshot.get("backlog_issues", 0)
-            unstarted_issues = cycle.progress_snapshot.get("unstarted_issues", 0)
-            started_issues = cycle.progress_snapshot.get("started_issues", 0)
-            cancelled_issues = cycle.progress_snapshot.get("cancelled_issues", 0)
-            completed_issues = cycle.progress_snapshot.get("completed_issues", 0)
-            total_issues = cycle.progress_snapshot.get("total_issues", 0)
+            progress_snapshot = snapshot_without_triage(cycle.progress_snapshot)
+            backlog_issues = progress_snapshot.get("backlog_issues", 0)
+            unstarted_issues = progress_snapshot.get("unstarted_issues", 0)
+            started_issues = progress_snapshot.get("started_issues", 0)
+            cancelled_issues = progress_snapshot.get("cancelled_issues", 0)
+            completed_issues = progress_snapshot.get("completed_issues", 0)
+            total_issues = progress_snapshot.get("total_issues", 0)
         else:
             backlog_issues = Issue.issue_objects.filter(
                 issue_cycle__cycle_id=cycle_id,
@@ -757,12 +764,16 @@ class CycleProgressEndpoint(BaseAPIView):
                 state__group="completed",
             ).count()
 
-            total_issues = Issue.issue_objects.filter(
-                issue_cycle__cycle_id=cycle_id,
-                issue_cycle__deleted_at__isnull=True,
-                workspace__slug=slug,
-                project_id=project_id,
-            ).count()
+            total_issues = (
+                Issue.issue_objects.filter(
+                    issue_cycle__cycle_id=cycle_id,
+                    issue_cycle__deleted_at__isnull=True,
+                    workspace__slug=slug,
+                    project_id=project_id,
+                )
+                .exclude(state__group="triage")
+                .count()
+            )
 
         return Response(
             {
@@ -798,7 +809,8 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                         issue_cycle__issue__is_draft=False,
                         issue_cycle__issue__deleted_at__isnull=True,
                         issue_cycle__deleted_at__isnull=True,
-                    ),
+                    )
+                    & exclude_triage_issues(),
                 )
             )
             .first()
@@ -848,6 +860,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                .exclude(state__group="triage")
                 .annotate(display_name=F("assignees__display_name"))
                 .annotate(assignee_id=F("assignees__id"))
                 .annotate(
@@ -902,6 +915,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     workspace__slug=slug,
                     project_id=project_id,
                 )
+                .exclude(state__group="triage")
                 .annotate(label_name=F("labels__name"))
                 .annotate(color=F("labels__color"))
                 .annotate(label_id=F("labels__id"))
@@ -945,6 +959,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     project_id=project_id,
                     workspace__slug=slug,
                 )
+                .exclude(state__group="triage")
                 .annotate(display_name=F("assignees__display_name"))
                 .annotate(assignee_id=F("assignees__id"))
                 .annotate(
@@ -1004,6 +1019,7 @@ class CycleAnalyticsEndpoint(BaseAPIView):
                     project_id=project_id,
                     workspace__slug=slug,
                 )
+                .exclude(state__group="triage")
                 .annotate(label_name=F("labels__name"))
                 .annotate(color=F("labels__color"))
                 .annotate(label_id=F("labels__id"))

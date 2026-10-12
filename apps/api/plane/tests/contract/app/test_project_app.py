@@ -91,10 +91,23 @@ class TestProjectAPIPost(TestProjectBase):
 
         # Verify default states were created
         states = State.objects.filter(project=project)
-        assert states.count() == 5
-        expected_states = ["Backlog", "Todo", "In Progress", "Done", "Cancelled"]
+        assert states.count() == 11
+        expected_states = [
+            "需求完善",
+            "待做",
+            "开发中",
+            "开发完成",
+            "测试中",
+            "测试打回",
+            "延期中",
+            "挂起",
+            "完成",
+            "延期完成",
+            "取消",
+        ]
         state_names = list(states.values_list("name", flat=True))
         assert set(state_names) == set(expected_states)
+        assert states.get(default=True).name == "需求完善"
 
     @pytest.mark.django_db
     def test_create_project_with_project_lead(self, session_client, workspace, create_user):

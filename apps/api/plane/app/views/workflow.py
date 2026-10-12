@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
@@ -22,6 +23,7 @@ from plane.utils.workflow import (
     MAIN_TRANSITIONS,
     available_transitions,
     bootstrap_project_workflow,
+    descendant_completion_preview,
 )
 
 
@@ -205,5 +207,21 @@ class IssueWorkflowTransitionsEndpoint(BaseAPIView):
                 "is_enabled": is_enabled,
                 "transitions": transitions,
             },
+            status=status.HTTP_200_OK,
+        )
+
+
+class IssueDescendantCompletionEndpoint(BaseAPIView):
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    def get(self, request, slug, project_id, issue_id):
+        issue = Issue.issue_objects.get(pk=issue_id, project_id=project_id, workspace__slug=slug)
+        try:
+            state = State.objects.filter(id=request.query_params.get("state_id"), project_id=project_id).first()
+        except (ValidationError, ValueError):
+            state = None
+        if state is None:
+            return Response({"should_prompt": False, "eligible_count": 0}, status=status.HTTP_200_OK)
+        return Response(
+            descendant_completion_preview(issue, request.user.id, state),
             status=status.HTTP_200_OK,
         )

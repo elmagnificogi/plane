@@ -31,6 +31,11 @@ import { EIssueServiceType, EIssueLayoutTypes } from "@plane/types";
 import { convertToISODateString } from "@plane/utils";
 // plane web imports
 // services
+import {
+  confirmDescendantCompletion,
+  markDescendantCompletion,
+  notifyDescendantCompletionFailures,
+} from "@/components/issues/descendant-completion/prompt";
 import { CycleService } from "@/services/cycle.service";
 import { IssueArchiveService, IssueService } from "@/services/issue";
 import { ModuleService } from "@/services/module.service";
@@ -561,6 +566,17 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
   ) {
     // Store Before state of the issue
     const issueBeforeUpdate = clone(this.rootIssueStore.issues.getIssueById(issueId));
+    const targetState = data.state_id ? this.rootIssueStore.rootStore.state.getStateById(data.state_id) : undefined;
+    const mayCompleteDescendants = !targetState || targetState.group === "completed";
+    let shouldCompleteDescendants = false;
+    if (shouldSync && data.state_id && mayCompleteDescendants && issueBeforeUpdate?.state_id !== data.state_id) {
+      shouldCompleteDescendants = await confirmDescendantCompletion({
+        workspaceSlug,
+        projectId,
+        issueId,
+        stateId: data.state_id,
+      });
+    }
     try {
       // Update the Respective Stores
       this.rootIssueStore.issues.updateIssue(issueId, data);
@@ -576,7 +592,24 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       } as TIssue);
 
       // call API to update the issue
-      await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+      if (shouldCompleteDescendants) markDescendantCompletion(issueId);
+      const updateResponse = await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+      if (updateResponse?.completed_issue_ids?.length && updateResponse.done_state_id) {
+        updateResponse.completed_issue_ids.forEach((completedIssueId: string) => {
+          const issueBeforeCascade = clone(this.rootIssueStore.issues.getIssueById(completedIssueId));
+          this.rootIssueStore.issues.updateIssue(completedIssueId, { state_id: updateResponse.done_state_id });
+          if (!issueBeforeCascade || issueBeforeCascade.state_id === updateResponse.done_state_id) return;
+          this.updateIssueList(
+            { ...issueBeforeCascade, state_id: updateResponse.done_state_id } as TIssue,
+            issueBeforeCascade
+          );
+        });
+      }
+      if (updateResponse?.failed?.length) {
+        notifyDescendantCompletionFailures(
+          updateResponse.failed.map((failedIssue: { name?: string; id: string }) => failedIssue.name || failedIssue.id)
+        );
+      }
 
       // call fetch Parent Stats
       this.fetchParentStats(workspaceSlug, projectId);

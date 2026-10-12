@@ -48,6 +48,17 @@ export type TIssueWorkflowTransitions = {
   transitions: TIssueWorkflowTransition[];
 };
 
+export type TDescendantCompletionPreview = {
+  should_prompt: boolean;
+  eligible_count: number;
+};
+
+export type TDescendantCompletionResult = {
+  completed_issue_ids: string[];
+  failed: { id: string; name: string; message: string }[];
+  done_state_id: string | null;
+};
+
 export class ProjectWorkflowService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -87,6 +98,21 @@ export class ProjectWorkflowService extends APIService {
     issueId: string
   ): Promise<TIssueWorkflowTransitions> {
     return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/workflow-transitions/`)
+      .then((response) => response.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
+  async previewDescendantCompletion(
+    workspaceSlug: string,
+    projectId: string,
+    issueId: string,
+    stateId: string
+  ): Promise<TDescendantCompletionPreview> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${issueId}/descendant-completion/`, {
+      params: { state_id: stateId },
+    })
       .then((response) => response.data)
       .catch((error) => {
         throw error?.response?.data;

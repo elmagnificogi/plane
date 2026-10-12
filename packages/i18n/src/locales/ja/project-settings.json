@@ -221,7 +221,7 @@
         "backlog": "Backlog",
         "todo": "Todo",
         "in_progress": "In Progress",
-        "waiting_for_test": "Waiting for Test",
+        "waiting_for_test": "Development complete",
         "testing": "Testing",
         "done_or_delayed_done": "Done / Delayed Done"
       },
@@ -253,6 +253,14 @@
           "error_title": "Save failed",
           "error_message": "Check that the member still belongs to the project."
         }
+      },
+      "descendant_completion": {
+        "title": "子タスクを完了",
+        "content": "子タスクも完了にしますか？",
+        "confirm": "はい",
+        "decline": "いいえ",
+        "failure_title": "一部の子タスクは変更されていません",
+        "failure_message": "{names} は元の状態のままです。"
       }
     },
     "empty_state": {

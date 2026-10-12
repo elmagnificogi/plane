@@ -20,43 +20,80 @@ class StateGroup(models.TextChoices):
     TRIAGE = "triage", "Triage"
 
 
-# Default states
+# Default states for a newly created project. These follow the Plan status
+# catalog. Triage stays hidden and is only used by intake.
 DEFAULT_STATES = [
     {
-        "name": "Backlog",
+        "name": "需求完善",
         "color": "#60646C",
         "sequence": 15000,
         "group": StateGroup.BACKLOG.value,
         "default": True,
     },
     {
-        "name": "Todo",
+        "name": "待做",
         "color": "#60646C",
         "sequence": 25000,
         "group": StateGroup.UNSTARTED.value,
     },
     {
-        "name": "In Progress",
+        "name": "开发中",
         "color": "#F59E0B",
         "sequence": 35000,
         "group": StateGroup.STARTED.value,
     },
     {
-        "name": "Done",
-        "color": "#46A758",
+        "name": "开发完成",
+        "color": "#8B5CF6",
         "sequence": 45000,
+        "group": StateGroup.STARTED.value,
+    },
+    {
+        "name": "测试中",
+        "color": "#3B82F6",
+        "sequence": 55000,
+        "group": StateGroup.STARTED.value,
+    },
+    {
+        "name": "测试打回",
+        "color": "#EF4444",
+        "sequence": 65000,
+        "group": StateGroup.STARTED.value,
+    },
+    {
+        "name": "完成",
+        "color": "#46A758",
+        "sequence": 95000,
         "group": StateGroup.COMPLETED.value,
     },
     {
-        "name": "Cancelled",
+        "name": "延期完成",
+        "color": "#0E7490",
+        "sequence": 105000,
+        "group": StateGroup.COMPLETED.value,
+    },
+    {
+        "name": "取消",
         "color": "#9AA4BC",
-        "sequence": 55000,
+        "sequence": 115000,
+        "group": StateGroup.CANCELLED.value,
+    },
+    {
+        "name": "延期中",
+        "color": "#D97706",
+        "sequence": 125000,
+        "group": StateGroup.CANCELLED.value,
+    },
+    {
+        "name": "挂起",
+        "color": "#78716C",
+        "sequence": 135000,
         "group": StateGroup.CANCELLED.value,
     },
     {
         "name": "Triage",
         "color": "#4E5355",
-        "sequence": 65000,
+        "sequence": 145000,
         "group": StateGroup.TRIAGE.value,
     },
 ]

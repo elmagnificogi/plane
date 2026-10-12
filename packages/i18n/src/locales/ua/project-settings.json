@@ -221,7 +221,7 @@
         "backlog": "Backlog",
         "todo": "Todo",
         "in_progress": "In Progress",
-        "waiting_for_test": "Waiting for Test",
+        "waiting_for_test": "Development complete",
         "testing": "Testing",
         "done_or_delayed_done": "Done / Delayed Done"
       },
@@ -253,6 +253,14 @@
           "error_title": "Save failed",
           "error_message": "Check that the member still belongs to the project."
         }
+      },
+      "descendant_completion": {
+        "title": "Завершити дочірні елементи",
+        "content": "Позначити дочірні елементи як завершені?",
+        "confirm": "Так",
+        "decline": "Ні",
+        "failure_title": "Деякі дочірні елементи не змінилися",
+        "failure_message": "{names} залишилися в попередньому стані."
       }
     },
     "empty_state": {

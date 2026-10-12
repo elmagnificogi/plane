@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+import json
 from dataclasses import dataclass
 from typing import Iterable
 from uuid import UUID
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
 
 from plane.db.models import (
     Issue,
@@ -26,17 +30,27 @@ from plane.db.models import (
 WORKFLOW_SCHEMA_VERSION = 1
 
 STATE_DEFINITIONS = {
-    "backlog": {"name": "Backlog", "group": StateGroup.BACKLOG, "color": "#60646C"},
-    "todo": {"name": "Todo", "group": StateGroup.UNSTARTED, "color": "#60646C"},
-    "in_progress": {"name": "In Progress", "group": StateGroup.STARTED, "color": "#F59E0B"},
-    "delayed": {"name": "延期中", "group": StateGroup.STARTED, "color": "#D97706"},
-    "waiting_for_test": {"name": "等待测试", "group": StateGroup.STARTED, "color": "#8B5CF6"},
+    "backlog": {"name": "需求完善", "group": StateGroup.BACKLOG, "color": "#60646C"},
+    "todo": {"name": "待做", "group": StateGroup.UNSTARTED, "color": "#60646C"},
+    "in_progress": {"name": "开发中", "group": StateGroup.STARTED, "color": "#F59E0B"},
+    "delayed": {"name": "延期中", "group": StateGroup.CANCELLED, "color": "#D97706"},
+    "waiting_for_test": {"name": "开发完成", "group": StateGroup.STARTED, "color": "#8B5CF6"},
     "testing": {"name": "测试中", "group": StateGroup.STARTED, "color": "#3B82F6"},
     "test_rejected": {"name": "测试打回", "group": StateGroup.STARTED, "color": "#EF4444"},
-    "suspended": {"name": "挂起", "group": StateGroup.STARTED, "color": "#78716C"},
-    "done": {"name": "Done", "group": StateGroup.COMPLETED, "color": "#46A758"},
-    "delayed_done": {"name": "延期完成", "group": StateGroup.COMPLETED, "color": "#65A30D"},
-    "cancelled": {"name": "Cancelled", "group": StateGroup.CANCELLED, "color": "#9AA4BC"},
+    "suspended": {"name": "挂起", "group": StateGroup.CANCELLED, "color": "#78716C"},
+    "done": {"name": "完成", "group": StateGroup.COMPLETED, "color": "#46A758"},
+    "delayed_done": {"name": "延期完成", "group": StateGroup.COMPLETED, "color": "#0E7490"},
+    "cancelled": {"name": "取消", "group": StateGroup.CANCELLED, "color": "#9AA4BC"},
+}
+
+# Names used before the Plan catalog became the default project states.
+LEGACY_STATE_NAMES = {
+    "backlog": ("Backlog",),
+    "todo": ("Todo",),
+    "in_progress": ("In Progress",),
+    "waiting_for_test": ("等待测试", "等待测试/开发完成"),
+    "done": ("Done",),
+    "cancelled": ("Cancelled",),
 }
 
 LABEL_DEFINITIONS = {
@@ -44,6 +58,8 @@ LABEL_DEFINITIONS = {
     "blocking": {"name": "阻断", "color": "#DC2626", "description": "阻止主任务完成的子任务"},
 }
 
+
+SKIP_DESCENDANT_STATE_KEYS = frozenset({"cancelled", "delayed", "delayed_done", "suspended"})
 
 MAIN_TRANSITIONS = {
     ("backlog", "todo"): WorkflowRole.PRODUCT,
@@ -306,13 +322,169 @@ def dispatch_workflow_transition(decision: WorkflowTransitionDecision, *, slug: 
     )
 
 
+def _eligible_descendants(issue: Issue, configuration: ProjectWorkflowConfiguration) -> list[Issue]:
+    """Return same-project descendants that a project manager may move to Done.
+
+    Cancelled, delayed, delayed-done, suspended, and blocking-label issues stop their branch.
+    An issue already in Done is left unchanged, and its other descendants are still visited.
+    """
+
+    done_state_id = str(configuration.state_mapping.get("done") or "")
+    blocking_label_id = configuration.blocking_label_id
+    eligible: list[Issue] = []
+    frontier = [issue.id]
+    seen = {issue.id}
+    while frontier:
+        children = list(
+            Issue.issue_objects.filter(project_id=issue.project_id, parent_id__in=frontier).select_related("state")
+        )
+        if not children:
+            break
+        blocking_ids = set()
+        if blocking_label_id:
+            blocking_ids = set(
+                IssueLabel.objects.filter(
+                    issue_id__in=[child.id for child in children],
+                    label_id=blocking_label_id,
+                ).values_list("issue_id", flat=True)
+            )
+        next_frontier = []
+        for child in children:
+            if child.id in seen:
+                continue
+            seen.add(child.id)
+            state_key = _state_key(configuration, child.state_id)
+            if child.id in blocking_ids or state_key in SKIP_DESCENDANT_STATE_KEYS:
+                continue
+            if str(child.state_id) != done_state_id:
+                eligible.append(child)
+            next_frontier.append(child.id)
+        frontier = next_frontier
+    return eligible
+
+
+def descendant_completion_preview(issue: Issue, actor_id, target_state: State) -> dict:
+    """Tell the client whether completing this issue should ask about child items."""
+
+    configuration = ProjectWorkflowConfiguration.objects.filter(project_id=issue.project_id, is_enabled=True).first()
+    if configuration is None:
+        return {"should_prompt": False, "eligible_count": 0}
+    if _state_key(configuration, target_state.id) not in {"done", "delayed_done"}:
+        return {"should_prompt": False, "eligible_count": 0}
+    if WorkflowRole.PROJECT_MANAGER not in _member_roles(issue.project_id, actor_id):
+        return {"should_prompt": False, "eligible_count": 0}
+    try:
+        validate_issue_transition(issue=issue, target_state=target_state, actor_id=actor_id)
+    except WorkflowTransitionError:
+        return {"should_prompt": False, "eligible_count": 0}
+    eligible_count = len(_eligible_descendants(issue, configuration))
+    return {"should_prompt": eligible_count > 0, "eligible_count": eligible_count}
+
+
+def _record_descendant_state_change(*, child: Issue, old_state_id, new_state_id, actor_id, slug: str, origin):
+    from plane.bgtasks.issue_activities_task import issue_activity
+    from plane.bgtasks.webhook_task import model_activity
+
+    current_instance = json.dumps(
+        {"id": str(child.id), "state_id": str(old_state_id) if old_state_id else None},
+        cls=DjangoJSONEncoder,
+    )
+    requested_data = {"state_id": str(new_state_id)}
+    issue_activity.delay(
+        type="issue.activity.updated",
+        requested_data=json.dumps(requested_data),
+        actor_id=str(actor_id),
+        issue_id=str(child.id),
+        project_id=str(child.project_id),
+        current_instance=current_instance,
+        epoch=int(timezone.now().timestamp()),
+        notification=True,
+        origin=origin,
+    )
+    model_activity.delay(
+        model_name="issue",
+        model_id=str(child.id),
+        requested_data=requested_data,
+        current_instance=current_instance,
+        actor_id=actor_id,
+        slug=slug,
+        origin=origin,
+    )
+
+
+def complete_descendant_issues(*, issue: Issue, actor_id, slug: str, origin) -> dict | None:
+    """Move eligible descendants to Done after a project manager completes the parent.
+
+    Returns None when this actor or target state cannot cascade. Per-child failures stay
+    in ``failed`` and do not undo siblings that already moved to Done.
+    """
+
+    configuration = ProjectWorkflowConfiguration.objects.filter(project_id=issue.project_id, is_enabled=True).first()
+    if configuration is None:
+        return None
+    if _state_key(configuration, issue.state_id) not in {"done", "delayed_done"}:
+        return None
+    if WorkflowRole.PROJECT_MANAGER not in _member_roles(issue.project_id, actor_id):
+        return None
+
+    done_state_id = configuration.state_mapping.get("done")
+    done_state = State.objects.filter(id=done_state_id, project_id=issue.project_id).first() if done_state_id else None
+    if done_state is None:
+        return {
+            "completed_issue_ids": [],
+            "failed": [{"id": str(issue.id), "name": issue.name, "message": "项目未配置完成状态。"}],
+            "done_state_id": None,
+        }
+
+    completed = []
+    failed = []
+    for child in _eligible_descendants(issue, configuration):
+        old_state_id = child.state_id
+        try:
+            decision = validate_issue_transition(issue=child, target_state=done_state, actor_id=actor_id)
+        except WorkflowTransitionError as error:
+            failed.append({"id": str(child.id), "name": child.name, "message": error.message})
+            continue
+        child.state = done_state
+        child.save(update_fields=["state", "updated_at"])
+        if decision:
+            dispatch_workflow_transition(decision, slug=slug, origin=origin)
+        _record_descendant_state_change(
+            child=child,
+            old_state_id=old_state_id,
+            new_state_id=done_state.id,
+            actor_id=actor_id,
+            slug=slug,
+            origin=origin,
+        )
+        completed.append(str(child.id))
+    return {
+        "completed_issue_ids": completed,
+        "failed": failed,
+        "done_state_id": str(done_state.id),
+    }
+
+
+def _matching_workflow_state(project: Project, key: str, definition: dict) -> State | None:
+    names = (definition["name"], *LEGACY_STATE_NAMES.get(key, ()))
+    query = Q()
+    for name in names:
+        query |= Q(name__iexact=name)
+    matches = list(State.objects.filter(project=project).filter(query))
+    for name in names:
+        for state in matches:
+            if state.name.lower() == name.lower():
+                return state
+    return None
+
+
 @transaction.atomic
 def bootstrap_project_workflow(project: Project, *, actor_id) -> ProjectWorkflowConfiguration:
     """Create only missing states/labels and return an enabled configuration."""
 
     state_mapping = {}
     for key, definition in STATE_DEFINITIONS.items():
-        state = State.objects.filter(project=project, name__iexact=definition["name"]).first()
+        state = _matching_workflow_state(project, key, definition)
         if state is None:
             state = State.objects.create(
                 project=project,

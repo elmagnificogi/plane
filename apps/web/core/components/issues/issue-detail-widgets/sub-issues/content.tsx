@@ -61,7 +61,7 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
   const {
     toggleCreateIssueModal,
     toggleDeleteIssueModal,
-    subIssues: { subIssueHelpersByIssueId, setSubIssueHelpers },
+    subIssues: { subIssueHelpersByIssueId, addSubIssueHelper, removeSubIssueHelper },
   } = useIssueDetail(issueServiceType);
 
   // helpers
@@ -84,19 +84,28 @@ export const SubIssuesCollapsibleContent = observer(function SubIssuesCollapsibl
   );
 
   const handleFetchSubIssues = useCallback(async () => {
-    const currentSubIssueHelpers = subIssueHelpersByIssueId(`${parentIssueId}_root`);
+    const helperId = `${parentIssueId}_root`;
+    const currentSubIssueHelpers = subIssueHelpersByIssueId(helperId);
     if (!currentSubIssueHelpers.issue_visibility.includes(parentIssueId)) {
       try {
-        setSubIssueHelpers(`${parentIssueId}_root`, "preview_loader", parentIssueId);
+        addSubIssueHelper(helperId, "preview_loader", parentIssueId);
         await subIssueOperations.fetchSubIssues(workspaceSlug, projectId, parentIssueId);
-        setSubIssueHelpers(`${parentIssueId}_root`, "issue_visibility", parentIssueId);
+        addSubIssueHelper(helperId, "issue_visibility", parentIssueId);
       } catch (error) {
         console.error("Error fetching sub-work items:", error);
       } finally {
-        setSubIssueHelpers(`${parentIssueId}_root`, "preview_loader", "");
+        removeSubIssueHelper(helperId, "preview_loader", parentIssueId);
       }
     }
-  }, [parentIssueId, projectId, setSubIssueHelpers, subIssueHelpersByIssueId, subIssueOperations, workspaceSlug]);
+  }, [
+    addSubIssueHelper,
+    parentIssueId,
+    projectId,
+    removeSubIssueHelper,
+    subIssueHelpersByIssueId,
+    subIssueOperations,
+    workspaceSlug,
+  ]);
 
   useEffect(() => {
     handleFetchSubIssues();
